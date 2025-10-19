@@ -1,0 +1,66 @@
+# Binaries for programs and plugins
+/bin/
+/dist/
+/*.exe
+/*.dll
+/*.so
+/*.dylib
+
+# Output of the go coverage tool
+coverage.out
+
+# Build directories
+_build/
+out/
+
+# Vendor (uncomment if you don't vendor)
+# /vendor/
+
+# Local env files
+.env
+.env.local
+.env.*.local
+
+# Data / DBs
+/data/
+*.db
+*.sqlite
+*.db-wal
+*.db-shm
+
+# IDEs and editors
+.vscode/
+.idea/
+*.iml
+*.sublime-*
+
+# macOS / Windows junk
+.DS_Store
+Thumbs.db
+
+# Logs and temp
+*.log
+*.tmp
+*.temp
+
+# Test / test binaries
+*.test
+
+# Git LFS track config (don't accidentally commit large assets)
+.gitattributes
+
+# Terraform / local machines / caches
+*.tfstate
+*.tfstate.backup
+.terraform/
+
+# JetBrains caches
+/.idea/
+
+# Go-specific cache (not usually in repo but safe)
+*.coverprofile
+
+# Misc
+node_modules/
+
+/build/
