@@ -5,6 +5,7 @@ import (
 	"log"
 	"os"
 
+	"github.com/0xrootAnon/0xRootShell/internal/sound"
 	"github.com/0xrootAnon/0xRootShell/internal/store"
 	"github.com/0xrootAnon/0xRootShell/internal/ui"
 	tea "github.com/charmbracelet/bubbletea"
@@ -34,7 +35,18 @@ func main() {
 	}
 	defer st.Close()
 
-	m := ui.NewModel(st, asciiArt)
+	// initialize sound manager (non-fatal if audio init fails)
+	var sm *sound.SoundManager
+	if s, err := sound.New(44100); err == nil {
+		sm = s
+		// play small startup theme
+		sm.PlayEvent("startup")
+	} else {
+		// log audio init failure but continue without sound
+		log.Printf("audio init failed (continuing without sound): %v", err)
+	}
+
+	m := ui.NewModel(st, asciiArt, sm)
 
 	prog := tea.NewProgram(m, tea.WithAltScreen())
 	if _, err := prog.Run(); err != nil {

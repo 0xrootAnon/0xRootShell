@@ -11,6 +11,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"github.com/0xrootAnon/0xRootShell/internal/engine"
+	"github.com/0xrootAnon/0xRootShell/internal/sound"
 	"github.com/0xrootAnon/0xRootShell/internal/store"
 )
 
@@ -21,8 +22,7 @@ var (
 	footerStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#6BFFB8")).Italic(true)
 )
 
-//yes dude, some engineers actually write comments (I'm autism, I'm paranoia)
-/***messages for animation ticks***/
+// messages for animation ticks
 type tickMsg time.Time
 
 type bootDoneMsg struct{}
@@ -38,6 +38,9 @@ type Model struct {
 	width     int
 	height    int
 
+	// sound manager (may be nil — audio optional)
+	sound *sound.SoundManager
+
 	//boot animation state
 	booting       bool
 	bootLines     []string //lines to reveal at startup
@@ -51,8 +54,8 @@ type Model struct {
 	printCharIndex int
 }
 
-// this prepares the model and boot messages.
-func NewModel(st *store.Store, ascii string) Model {
+// NewModel now accepts an optional sound manager (pass nil to disable sounds)
+func NewModel(st *store.Store, ascii string, sm *sound.SoundManager) Model {
 	ti := textinput.New()
 	ti.Placeholder = "type a command — e.g. launch chrome, find resume, sys status"
 	ti.Focus()
@@ -75,6 +78,7 @@ func NewModel(st *store.Store, ascii string) Model {
 		engine:    engine.NewEngine(st),
 		booting:   true,
 		bootLines: bootMsgs,
+		sound:     sm,
 	}
 	return m
 }
@@ -124,6 +128,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.outputBuf = append(m.outputBuf, fmt.Sprintf("> %s", val))
 				m.outputBuf = append(m.outputBuf, "") //placeholder for animated output
 				m.input.SetValue("")
+				//play a small response tone (command accepted)
+				if m.sound != nil {
+					m.sound.PlayEvent("response")
+				}
 				//start printing ticks
 				return m, printTickCmd()
 			}
@@ -214,6 +222,10 @@ func (m Model) handleTick() (tea.Model, tea.Cmd) {
 			m.booting = false
 			//append a blank line to separate boot from regular output
 			m.outputBuf = append(m.outputBuf, "")
+			// play startup finished sound
+			if m.sound != nil {
+				m.sound.PlayEvent("startup")
+			}
 			return m, nil
 		}
 		line := m.bootLines[m.bootLineIndex]
@@ -231,6 +243,10 @@ func (m Model) handleTick() (tea.Model, tea.Cmd) {
 		if m.bootCharIndex < len(runes) {
 			cur = append(cur, runes[m.bootCharIndex])
 			m.outputBuf[lastIdx] = string(cur)
+			// play a small typeclick for cinematic feel every 2 chars
+			if m.sound != nil && (m.bootCharIndex%2 == 0) {
+				m.sound.PlayEvent("typeclick")
+			}
 			m.bootCharIndex++
 			//schedule next tick
 			return m, bootTickCmd()
@@ -250,24 +266,21 @@ func (m Model) handleTick() (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 		//ensure we have a placeholder line in outputBuf for this printing line
-		//find the last empty placeholder (we appended one when starting printing)
-		//we'll overwrite the last element of outputBuf (assuming it is placeholder).
-		//print characters into that element until line done, then append next line placeholder.
 		if m.printLineIndex >= len(m.printLines) {
 			//done printing all lines
 			m.printing = false
+			// play small response/done chime
+			if m.sound != nil {
+				m.sound.PlayEvent("response")
+			}
 			return m, nil
 		}
 
 		currLine := m.printLines[m.printLineIndex]
 		runes := []rune(currLine)
 		//find the index in outputBuf where the animated printed line sits.
-		//we appended a blank placeholder immediately after the command line when starting printing.
-		//so the placeholder is at the last position currently or near last.
-		//we'll search from the end for the first empty string or a string that begins with the same prefix.
 		placeholderIdx := -1
 		for i := len(m.outputBuf) - 1; i >= 0; i-- {
-			//pick the last line that is empty or that we know is the printing slot
 			placeholderIdx = i
 			break
 		}
@@ -281,6 +294,10 @@ func (m Model) handleTick() (tea.Model, tea.Cmd) {
 		if m.printCharIndex < len(runes) {
 			curRunes = append(curRunes, runes[m.printCharIndex])
 			m.outputBuf[placeholderIdx] = string(curRunes)
+			// play typeclick every 2 chars to avoid too many sounds
+			if m.sound != nil && (m.printCharIndex%2 == 0) {
+				m.sound.PlayEvent("typeclick")
+			}
 			m.printCharIndex++
 			// next char
 			return m, printTickCmd()
@@ -295,6 +312,10 @@ func (m Model) handleTick() (tea.Model, tea.Cmd) {
 		}
 		//all printed
 		m.printing = false
+		// final response chime
+		if m.sound != nil {
+			m.sound.PlayEvent("response")
+		}
 		return m, nil
 	}
 
