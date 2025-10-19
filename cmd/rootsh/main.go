@@ -1,6 +1,7 @@
 package main
 
 import (
+	_ "embed"
 	"log"
 	"os"
 
@@ -9,17 +10,20 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 )
 
+//go:embed assets/ascii.txt
+var embeddedAscii string
+
 func main() {
-	//ensure data directory
+	// ensure data directory exists
 	if _, err := os.Stat("data"); os.IsNotExist(err) {
 		_ = os.Mkdir("data", 0755)
 	}
 
-	//lets load ascii art from assets
-	asciiArt := ""
-	if b, err := os.ReadFile("assets/ascii.txt"); err == nil {
+	// use embedded ascii as default, allow on-disk override
+	asciiArt := embeddedAscii
+	if b, err := os.ReadFile("../assets/ascii.txt"); err == nil && len(b) > 0 {
 		asciiArt = string(b)
-	} else {
+	} else if asciiArt == "" {
 		asciiArt = "0xRootShell"
 	}
 
