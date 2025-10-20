@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 
+	"github.com/0xrootAnon/0xRootShell/internal/audio"
 	"github.com/0xrootAnon/0xRootShell/internal/store"
 	"github.com/0xrootAnon/0xRootShell/internal/ui"
 	tea "github.com/charmbracelet/bubbletea"
@@ -20,6 +21,8 @@ func main() {
 		_ = os.Mkdir("data", 0755)
 	}
 
+	audio.InitDefault()
+	defer audio.Shutdown()
 	// If DEBUG env var is set, enable debug logging to data/debug.log and stderr.
 	// Usage: DEBUG=1 go run ./cmd/rootsh
 	if os.Getenv("DEBUG") != "" {
@@ -52,6 +55,7 @@ func main() {
 	defer st.Close()
 
 	m := ui.NewModel(st, asciiArt)
+	defer audio.Shutdown()
 
 	prog := tea.NewProgram(m, tea.WithAltScreen())
 	if _, err := prog.Run(); err != nil {
