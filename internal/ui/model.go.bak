@@ -6,7 +6,6 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/0xrootAnon/0xRootShell/internal/audio"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -27,9 +26,6 @@ type tickMsg time.Time
 
 type bootDoneMsg struct{}
 type printDoneMsg struct{}
-
-// asyncMsg is used when the engine sends asynchronous strings (e.g., find results)
-type asyncMsg string
 
 type Model struct {
 	ascii     string
@@ -56,9 +52,6 @@ type Model struct {
 	// index in outputBuf where the first placeholder for the current printing session is located.
 	// when not printing, set to -1.
 	printPlaceholderIdx int
-
-	// async channel to receive engine messages (background results)
-	asyncCh chan string
 }
 
 func NewModel(st *store.Store, ascii string) Model {
@@ -76,25 +69,20 @@ func NewModel(st *store.Store, ascii string) Model {
 		"Ready.",
 	}
 
-	// create message channel for engine -> UI communication
-	ch := make(chan string, 16)
-
 	m := Model{
 		ascii:               ascii,
 		input:               ti,
 		store:               st,
-		engine:              engine.NewEngine(st, ch),
+		engine:              engine.NewEngine(st),
 		booting:             true,
 		bootLines:           bootMsgs,
 		printPlaceholderIdx: -1,
-		asyncCh:             ch,
 	}
 	return m
 }
 
 func (m Model) Init() tea.Cmd {
-	// start both the boot tick and the async listener
-	return tea.Batch(bootTickCmd(), listenCmd(m.asyncCh))
+	return bootTickCmd()
 }
 
 func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -103,10 +91,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tickMsg:
 		return m.handleTick()
-	case asyncMsg:
-		// append the async message to output buffer and re-arm the listener
-		m.outputBuf = append(m.outputBuf, string(msg))
-		return m, listenCmd(m.asyncCh)
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
@@ -216,19 +200,6 @@ func printTickCmd() tea.Cmd {
 	})
 }
 
-// listenCmd returns a tea.Cmd which waits for one message on the channel and
-// converts it into an asyncMsg for the main Update loop. After receiving one
-// message the Update handler re-arms the listener by returning listenCmd again.
-func listenCmd(ch <-chan string) tea.Cmd {
-	return func() tea.Msg {
-		s, ok := <-ch
-		if !ok {
-			return nil
-		}
-		return asyncMsg(s)
-	}
-}
-
 func (m Model) handleTick() (tea.Model, tea.Cmd) {
 	// boot sequence
 	if m.booting {
@@ -287,10 +258,7 @@ func (m Model) handleTick() (tea.Model, tea.Cmd) {
 		if m.printCharIndex < len(runes) {
 			curRunes = append(curRunes, runes[m.printCharIndex])
 			m.outputBuf[placeholderIdx] = string(curRunes)
-			// play typewriter beep (non-blocking)
-			audio.Beep()
 			m.printCharIndex++
-			// schedule next char tick
 			return m, printTickCmd()
 		}
 		// finished this line

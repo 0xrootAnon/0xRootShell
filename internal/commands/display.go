@@ -8,52 +8,93 @@ import (
 	"strings"
 )
 
-// CmdDisplay handles brightness subcommands
+// CmdDisplay handles brightness control:
+//
+//	display bright <0-100>
 func CmdDisplay(args []string) string {
 	if len(args) == 0 {
-		return "display: expected 'bright <0-100>'"
+		return "display: expected subcommand 'bright <0-100>'"
 	}
 	sub := strings.ToLower(args[0])
-	if sub == "bright" || sub == "brightness" {
+	switch sub {
+	case "bright", "brightness":
 		if len(args) < 2 {
-			return "display bright: expected 0-100"
+			return "display bright: expected value 0-100"
 		}
 		v, err := strconv.Atoi(args[1])
 		if err != nil || v < 0 || v > 100 {
 			return "display bright: value must be 0-100"
 		}
-		return displaySetBrightness(v)
+		return setBrightness(v)
+	default:
+		return "display: unknown subcommand. Try `display bright <0-100>`."
 	}
-	// accept direct numbers: display 70
-	if n, err := strconv.Atoi(sub); err == nil {
-		if n < 0 || n > 100 {
-			return "display: value must be 0-100"
-		}
-		return displaySetBrightness(n)
-	}
-	return "display: unknown subcommand"
 }
 
-func displaySetBrightness(v int) string {
+func setBrightness(percent int) string {
 	switch runtime.GOOS {
-	case "linux":
-		// try brightnessctl
-		percent := fmt.Sprintf("%d%%", v)
-		if err := exec.Command("brightnessctl", "set", percent).Run(); err == nil {
-			return fmt.Sprintf("Brightness set to %d%%", v)
-		}
-		// try xrandr (best-effort)
-		// NOTE: xrandr brightness is a multiplier (0.0-1.0)
-		// leave user instruction if missing
-		return "display bright: install `brightnessctl` or use your DE's brightness control."
 	case "windows":
-		return "display bright: Windows brightness control requires platform APIs or third-party tools. Try changing brightness via system settings."
-	case "darwin":
-		if err := exec.Command("osascript", "-e", fmt.Sprintf("tell application \"System Events\" to set the value of the brightness slider of the first display preferences pane to %d", v)).Run(); err == nil {
-			return fmt.Sprintf("Brightness set to %d%%", v)
+		// Try PowerShell WMI method (may require admin and only works for some displays)
+		script := fmt.Sprintf("(Get-WmiObject -Namespace root/WMI -Class WmiMonitorBrightnessMethods).WmiSetBrightness(1,%d)", percent)
+		cmd := exec.Command("powershell", "-NoProfile", "-Command", script)
+		if out, err := cmd.CombinedOutput(); err == nil {
+			return fmt.Sprintf("Brightness set to %d%% (PowerShell).", percent)
+		} else {
+			// helpful fallback note
+			return "display bright error: " + err.Error() + " — " + strings.TrimSpace(string(out)) + ". If this fails, consider vendor utilities or run with elevated privileges."
 		}
-		return "display bright: failed on macOS"
+	case "darwin":
+		// macOS: no standard CLI for brightness; suggest brew install brightness
+		if p, _ := exec.LookPath("brightness"); p != "" {
+			// brightness utility expects 0..1 float
+			val := fmt.Sprintf("%f", float64(percent)/100.0)
+			cmd := exec.Command(p, val)
+			if out, err := cmd.CombinedOutput(); err == nil {
+				return fmt.Sprintf("Brightness set to %d%% (brightness).", percent)
+			} else {
+				return "display bright error: " + err.Error() + " — " + strings.TrimSpace(string(out))
+			}
+		}
+		return "display bright: macOS requires a helper (try `brew install brightness`) or use System Settings."
 	default:
-		return "display bright: unsupported OS"
+		// Linux: prefer brightnessctl, fallback to xrandr with best-effort
+		if p, _ := exec.LookPath("brightnessctl"); p != "" {
+			val := fmt.Sprintf("%d%%", percent)
+			cmd := exec.Command(p, "set", val)
+			if out, err := cmd.CombinedOutput(); err == nil {
+				return fmt.Sprintf("Brightness set to %d%% (brightnessctl).", percent)
+			} else {
+				return "display bright error: " + err.Error() + " — " + strings.TrimSpace(string(out))
+			}
+		}
+		if p, _ := exec.LookPath("xrandr"); p != "" {
+			// find primary output via xrandr --query (best-effort)
+			out, err := exec.Command(p, "--query").CombinedOutput()
+			if err != nil {
+				return "display bright error: cannot query displays: " + err.Error()
+			}
+			lines := strings.Split(string(out), "\n")
+			var outName string
+			for _, l := range lines {
+				if strings.Contains(l, " connected") {
+					fields := strings.Fields(l)
+					outName = fields[0]
+					break
+				}
+			}
+			if outName == "" {
+				return "display bright: cannot detect output via xrandr"
+			}
+			// xrandr brightness is a float 0..1
+			f := float64(percent) / 100.0
+			cmd := exec.Command(p, "--output", outName, "--brightness", fmt.Sprintf("%f", f))
+			if o, err := cmd.CombinedOutput(); err == nil {
+				_ = o
+				return fmt.Sprintf("Brightness set to %d%% (xrandr on %s).", percent, outName)
+			} else {
+				return "display bright error: " + err.Error() + " — " + strings.TrimSpace(string(o))
+			}
+		}
+		return "display bright: no supported tool found (install brightnessctl or use xrandr)."
 	}
 }

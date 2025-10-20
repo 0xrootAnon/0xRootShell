@@ -8,11 +8,16 @@ import (
 	"strings"
 )
 
-// CmdAudio handles audio commands: vol <n>, mute, unmute
+// CmdAudio handles basic audio operations:
+//
+//	audio vol <0-100>
+//	audio mute
+//	audio unmute
 func CmdAudio(args []string) string {
 	if len(args) == 0 {
-		return "audio: expected 'vol <0-100>' or 'mute'/'unmute'"
+		return "audio: expected subcommand: vol <0-100> | mute | unmute"
 	}
+
 	sub := strings.ToLower(args[0])
 	switch sub {
 	case "mute":
@@ -21,73 +26,132 @@ func CmdAudio(args []string) string {
 		return audioMute(false)
 	case "vol", "volume":
 		if len(args) < 2 {
-			return "audio vol: expected a value 0-100"
+			return "audio vol: expected percentage 0-100, e.g. `audio vol 40`"
 		}
-		v, err := strconv.Atoi(args[1])
-		if err != nil || v < 0 || v > 100 {
-			return "audio vol: value must be 0-100"
+		pct, err := strconv.Atoi(args[1])
+		if err != nil || pct < 0 || pct > 100 {
+			return "audio vol: value must be an integer 0-100"
 		}
-		return audioSetVolume(v)
+		return audioSetVolume(pct)
 	default:
-		// allow shorthand: audio 50
-		if n, err := strconv.Atoi(sub); err == nil {
-			if n < 0 || n > 100 {
-				return "audio: value must be 0-100"
-			}
-			return audioSetVolume(n)
-		}
-		return "audio: unknown subcommand"
+		return "audio: unknown subcommand. Try `audio vol <0-100>`, `audio mute`, or `audio unmute`."
 	}
 }
 
-func audioMute(m bool) string {
+func audioMute(mute bool) string {
 	switch runtime.GOOS {
-	case "linux":
-		// try amixer
-		if err := exec.Command("amixer", "-D", "pulse", "sset", "Master", "mute").Run(); err == nil && m {
-			return "Muted."
-		}
-		if !m {
-			if err := exec.Command("amixer", "-D", "pulse", "sset", "Master", "unmute").Run(); err == nil {
-				return "Unmuted."
-			}
-		}
-		return "audio mute/unmute: failed. try installing `amixer` or use your desktop mixer."
 	case "windows":
-		// Recommend nircmd if available
-		if m {
-			if err := exec.Command("nircmd.exe", "mutesysvolume", "1").Run(); err == nil {
-				return "Muted."
+		// prefer nircmd if installed
+		if p, _ := exec.LookPath("nircmd"); p != "" {
+			arg := "mutesysvolume"
+			val := "1"
+			if !mute {
+				val = "0"
 			}
-			return "audio mute: install nircmd (https://www.nirsoft.net/utils/nircmd.html) for command-line volume control."
+			cmd := exec.Command(p, arg, val)
+			if out, err := cmd.CombinedOutput(); err != nil {
+				return "audio mute error: " + err.Error() + " — " + strings.TrimSpace(string(out))
+			}
+			if mute {
+				return "Audio muted (via nircmd)."
+			}
+			return "Audio unmuted (via nircmd)."
 		}
-		if err := exec.Command("nircmd.exe", "mutesysvolume", "0").Run(); err == nil {
-			return "Unmuted."
+		return "audio mute: nircmd not found. Download from https://www.nirsoft.net/utils/nircmd.html and put nircmd.exe in PATH."
+	case "darwin":
+		// macOS: use AppleScript to mute/unmute
+		val := "set volume with output muted"
+		if !mute {
+			val = "set volume without output muted"
 		}
-		return "audio unmute: install nircmd for CLI control."
+		cmd := exec.Command("osascript", "-e", val)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			return "audio mute error: " + err.Error() + " — " + strings.TrimSpace(string(out))
+		}
+		if mute {
+			return "Audio muted (macOS)."
+		}
+		return "Audio unmuted (macOS)."
 	default:
-		return "audio mute: unsupported OS"
+		// Linux: try pactl then amixer
+		if p, _ := exec.LookPath("pactl"); p != "" {
+			action := "set-sink-mute"
+			val := "1"
+			if !mute {
+				val = "0"
+			}
+			// default sink
+			cmd := exec.Command(p, action, "@DEFAULT_SINK@", val)
+			if out, err := cmd.CombinedOutput(); err == nil {
+				if mute {
+					return "Audio muted (pactl)."
+				}
+				return "Audio unmuted (pactl)."
+			} else {
+				_ = out
+			}
+		}
+		if p, _ := exec.LookPath("amixer"); p != "" {
+			arg := "set"
+			val := "mute"
+			if !mute {
+				val = "unmute"
+			}
+			cmd := exec.Command(p, "Master", arg, val)
+			if out, err := cmd.CombinedOutput(); err == nil {
+				if mute {
+					return "Audio muted (amixer)."
+				}
+				return "Audio unmuted (amixer)."
+			} else {
+				_ = out
+			}
+		}
+		return "audio mute: no supported audio control found (try installing pactl/pulseaudio, amixer, or nircmd on Windows)."
 	}
 }
 
-func audioSetVolume(v int) string {
+func audioSetVolume(pct int) string {
 	switch runtime.GOOS {
-	case "linux":
-		// using amixer for PulseAudio
-		p := fmt.Sprintf("%d%%", v)
-		if err := exec.Command("amixer", "-D", "pulse", "sset", "Master", p).Run(); err == nil {
-			return fmt.Sprintf("Volume set to %d%%", v)
-		}
-		return "audio vol: failed. ensure `amixer`/alsa-utils is installed."
 	case "windows":
-		// recommend nircmd
-		// nircmd expects 0-65535 volume so scale
-		scaled := int((v * 65535) / 100)
-		if err := exec.Command("nircmd.exe", "setsysvolume", fmt.Sprintf("%d", scaled)).Run(); err == nil {
-			return fmt.Sprintf("Volume set to %d%% (via nircmd)", v)
+		// nircmd accepts integer volume 0..65535 for setsysvolume
+		if p, _ := exec.LookPath("nircmd"); p != "" {
+			val := int((65535 * pct) / 100)
+			cmd := exec.Command(p, "setsysvolume", strconv.Itoa(val))
+			if out, err := cmd.CombinedOutput(); err != nil {
+				return "audio vol error: " + err.Error() + " — " + strings.TrimSpace(string(out))
+			}
+			return fmt.Sprintf("Volume set to %d%% (via nircmd).", pct)
 		}
-		return "audio vol: install nircmd to support Windows CLI volume control."
+		return "audio vol: nircmd not found. Install nircmd and place nircmd.exe in PATH."
+	case "darwin":
+		// macOS: use AppleScript to set output volume 0-100
+		script := fmt.Sprintf("set volume output volume %d", pct)
+		cmd := exec.Command("osascript", "-e", script)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			return "audio vol error: " + err.Error() + " — " + strings.TrimSpace(string(out))
+		}
+		return fmt.Sprintf("Volume set to %d%% (macOS).", pct)
 	default:
-		return "audio vol: unsupported OS"
+		// Linux: try pactl then amixer
+		if p, _ := exec.LookPath("pactl"); p != "" {
+			val := fmt.Sprintf("%d%%", pct)
+			cmd := exec.Command(p, "set-sink-volume", "@DEFAULT_SINK@", val)
+			if out, err := cmd.CombinedOutput(); err == nil {
+				return fmt.Sprintf("Volume set to %d%% (pactl).", pct)
+			} else {
+				return "audio vol error: " + err.Error() + " — " + strings.TrimSpace(string(out))
+			}
+		}
+		if p, _ := exec.LookPath("amixer"); p != "" {
+			val := fmt.Sprintf("%d%%", pct)
+			cmd := exec.Command(p, "sset", "Master", val)
+			if out, err := cmd.CombinedOutput(); err == nil {
+				return fmt.Sprintf("Volume set to %d%% (amixer).", pct)
+			} else {
+				return "audio vol error: " + err.Error() + " — " + strings.TrimSpace(string(out))
+			}
+		}
+		return "audio vol: no supported audio control found (install pactl/pulseaudio or amixer)."
 	}
 }

@@ -2,6 +2,7 @@ package main
 
 import (
 	_ "embed"
+	"io"
 	"log"
 	"os"
 
@@ -17,6 +18,22 @@ func main() {
 	// ensure data directory exists
 	if _, err := os.Stat("data"); os.IsNotExist(err) {
 		_ = os.Mkdir("data", 0755)
+	}
+
+	// If DEBUG env var is set, enable debug logging to data/debug.log and stderr.
+	// Usage: DEBUG=1 go run ./cmd/rootsh
+	if os.Getenv("DEBUG") != "" {
+		f, err := os.OpenFile("data/debug.log", os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+		if err == nil {
+			// Log to both stderr and the debug log file
+			log.SetOutput(io.MultiWriter(os.Stderr, f))
+			log.SetFlags(log.LstdFlags | log.Lshortfile)
+			log.Println("DEBUG mode enabled")
+		} else {
+			// If the debug file can't be opened, at least print to stderr
+			log.SetOutput(os.Stderr)
+			log.Println("DEBUG: could not open data/debug.log:", err)
+		}
 	}
 
 	// use embedded ascii as default, allow on-disk override

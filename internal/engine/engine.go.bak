@@ -11,24 +11,19 @@ import (
 )
 
 type Engine struct {
-	store   *store.Store
-	cwd     string // current working directory for the session
-	MsgChan chan string
+	store *store.Store
+	cwd   string //current working directory for the session
 }
 
-// NewEngine now accepts a message channel the engine can use to send asynchronous messages
-// back to the UI (e.g., background find results).
-func NewEngine(s *store.Store, ch chan string) *Engine {
+func NewEngine(s *store.Store) *Engine {
 	wd, err := os.Getwd()
 	if err != nil {
-		wd = "." // fallback
+		wd = "." //fallback
 	}
-	return &Engine{store: s, cwd: wd, MsgChan: ch}
+	return &Engine{store: s, cwd: wd}
 }
 
-// Execute parses the input and dispatches to the appropriate handler.
-// For potentially long-running commands like "find" we run them in a goroutine
-// and send results back over the engine message channel so the UI remains responsive.
+// parses the input and dispatches to the appropriate handler.
 func (e *Engine) Execute(raw string) string {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
@@ -48,38 +43,19 @@ func (e *Engine) Execute(raw string) string {
 	case "open":
 		return commands.CmdOpen(args)
 	case "find", "searchfile":
-		// run find in background and send results back to UI via MsgChan
-		if e.MsgChan != nil {
-			// capture values for goroutine
-			qargs := append([]string(nil), args...)
-			go func(a []string) {
-				// initial notice
-				query := strings.Join(a, " ")
-				if query == "" {
-					query = "(empty)"
-				}
-				e.MsgChan <- fmt.Sprintf("Searching for: %s", query)
-				// run the existing synchronous CmdFind (safe reuse)
-				res := commands.CmdFind(a)
-				// ensure results are clearly demarcated
-				e.MsgChan <- fmt.Sprintf("=== Search results for: %s ===\n%s\n=== End results ===", query, res)
-			}(qargs)
-			return "Searching... results will appear below when ready."
-		}
-		// fallback synchronous behavior if no message channel
 		return commands.CmdFind(args)
 	case "sys":
-		return commands.CmdSys(args)
+		return commands.CmdSys(args) // new: sys subcommands
 	case "audio", "vol":
-		return commands.CmdAudio(args)
+		return commands.CmdAudio(args) // new
 	case "display", "brightness", "screen":
-		return commands.CmdDisplay(args)
+		return commands.CmdDisplay(args) // new
 	case "net", "network":
-		return commands.CmdNet(args)
+		return commands.CmdNet(args) // new
 	case "file", "files":
-		return commands.CmdFile(args)
+		return commands.CmdFile(args) // new
 	case "compress", "zip", "extract":
-		return commands.CmdCompressArchive(append([]string{verb}, args...))
+		return commands.CmdCompressArchive(append([]string{verb}, args...)) // compress/extract handler
 	case "screenshot":
 		return commands.CmdScreenshot(args)
 	case "play":
@@ -87,7 +63,7 @@ func (e *Engine) Execute(raw string) string {
 	case "search", "web":
 		return commands.CmdSearch(args)
 	case "remind":
-		return commands.CmdRemind(args)
+		return commands.CmdRemind(args) // simple local reminder persistence
 	case "help":
 		return helpText()
 	case "history":
@@ -105,7 +81,7 @@ Common commands:
   pwd                      Print current directory
   launch <app>             Launch application or URL
   open <file|url>          Open file or URL
-  find <pattern>           Fuzzy file search (non-blocking; results appear when ready)
+  find <pattern>           Fuzzy file search
   sys <status|lock|sleep|off|bootlog|update>
   audio vol <0-100>        Set volume, audio mute/unmute
   display bright <0-100>   Set screen brightness
@@ -122,10 +98,7 @@ Common commands:
 `
 }
 
-// The rest of the engine code (splitArgs, CmdCd, CmdPwd, etc.) remains unchanged.
-// We'll include the existing implementations for splitArgs, CmdPwd, and CmdCd below,
-// copied from your previous engine implementation for completeness.
-
+// naive splitting by spaces but preserves quoted sequences
 func splitArgs(s string) []string {
 	var out []string
 	var cur strings.Builder
@@ -215,5 +188,5 @@ func (e *Engine) CmdCd(args []string) string {
 
 	//update engine cwd
 	e.cwd = target
-	return "" //success -> empty output (shell convention)
+	return "" //success -> empty output (shell convention); can return path or a confirmation
 }
