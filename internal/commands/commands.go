@@ -139,11 +139,10 @@ func CmdOpen(args []string) string {
 	}
 	target := strings.Join(args, " ")
 
-	// expand path
+	// expand path first so local files are preferred over naive URL detection
 	target = expandPath(target)
 
-	// If a local file exists, prefer opening it rather than treating as URL.
-	// This prevents bare filenames with dots (e.g. "tasks.txt") being interpreted as URLs.
+	// If a local file exists (relative or absolute), prefer opening it.
 	if !strings.Contains(target, "://") {
 		// try relative to cwd
 		if !filepath.IsAbs(target) {
@@ -161,6 +160,17 @@ func CmdOpen(args []string) string {
 			return fmt.Sprintf("Opened %s", target)
 		}
 	}
+
+	// URL?
+	if looksLikeURL(target) {
+		target = prependHTTPSIfNeeded(target)
+		if err := runOpen(target); err != nil {
+			return "open error: " + err.Error()
+		}
+		return fmt.Sprintf("Opened %s", target)
+	}
+
+	// rest of original logic continues...
 
 	// URL?
 	if looksLikeURL(target) {

@@ -19,7 +19,12 @@ func main() {
 	if _, err := os.Stat("data"); os.IsNotExist(err) {
 		_ = os.Mkdir("data", 0755)
 	}
-
+	// ensure common subfolders
+	_ = os.MkdirAll("data/screenshots", 0755)
+	_ = os.MkdirAll("data/recordings", 0755)
+	_ = os.MkdirAll("data/outgoing_messages", 0755)
+	_ = os.MkdirAll("data/cache", 0755)
+	
 	// If DEBUG env var is set, enable debug logging to data/debug.log and stderr.
 	// Usage: DEBUG=1 go run ./cmd/rootsh
 	if os.Getenv("DEBUG") != "" {

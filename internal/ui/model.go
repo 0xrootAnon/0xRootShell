@@ -291,7 +291,6 @@ func (m Model) handleTick() (tea.Model, tea.Cmd) {
 			curRunes = append(curRunes, runes[m.printCharIndex])
 			m.outputBuf[placeholderIdx] = string(curRunes)
 			// play typewriter beep (non-blocking)
-			audio.Beep()
 			m.printCharIndex++
 			// schedule next char tick
 			return m, printTickCmd()

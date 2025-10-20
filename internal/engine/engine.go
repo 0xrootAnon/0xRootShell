@@ -82,8 +82,6 @@ func (e *Engine) Execute(raw string) string {
 		return commands.CmdCompressArchive(append([]string{verb}, args...))
 	case "screenshot":
 		return commands.CmdScreenshot(args)
-	case "play":
-		return commands.CmdPlay(args)
 	case "search", "web":
 		return commands.CmdSearch(args)
 	case "remind":
@@ -130,9 +128,6 @@ func (e *Engine) Execute(raw string) string {
 		return "Timer not scheduled: no message channel."
 	case "speedtest":
 		return commands.CmdSpeedtest(args)
-	case "sys":
-		// existing
-		return commands.CmdSys(args)
 	case "ls":
 		return commands.CmdLS(args)
 	case "calc":
