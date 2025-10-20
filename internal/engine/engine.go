@@ -93,6 +93,50 @@ func (e *Engine) Execute(raw string) string {
 	case "history":
 		h, _ := e.store.ListHistory(30)
 		return strings.Join(h, "\n")
+	case "weather":
+		return commands.CmdWeather(args) // opens browser with weather search
+	case "convert", "currency":
+		return commands.CmdConvert(args) // currency conversion via web search
+	case "news":
+		return commands.CmdNews(args) // open news search
+	case "message", "msg":
+		return commands.CmdMessage(args) // local/outgoing-message queue or plugin hook
+	case "mail":
+		return commands.CmdMail(args) // placeholder / open mail client
+	case "notify":
+		return commands.CmdNotify(args) // list / create notifications (local)
+	case "play":
+		return commands.CmdPlay(args) // play file/url; spawns ffmpeg/player if needed
+	case "pause", "next", "prev":
+		return commands.CmdMediaControl(append([]string{verb}, args...))
+	case "record":
+		// run screen/cam recording in background and report when done
+		if e.MsgChan != nil {
+			qargs := append([]string(nil), args...)
+			go func(a []string) {
+				e.MsgChan <- "Starting recording..."
+				res := commands.CmdRecord(a) // new commands file; returns result message
+				e.MsgChan <- res
+			}(qargs)
+			return "Recording started..."
+		}
+		return commands.CmdRecord(args)
+	case "alarm", "timer":
+		// schedule a timer/alarm in background using engine message channel
+		if e.MsgChan != nil {
+			go commands.ScheduleTimer(args, e.MsgChan)
+			return "Timer scheduled."
+		}
+		return "Timer not scheduled: no message channel."
+	case "speedtest":
+		return commands.CmdSpeedtest(args)
+	case "sys":
+		// existing
+		return commands.CmdSys(args)
+	case "ls":
+		return commands.CmdLS(args)
+	case "calc":
+		return commands.CmdCalc(args)
 	default:
 		return "Unknown command. Try 'help'."
 	}

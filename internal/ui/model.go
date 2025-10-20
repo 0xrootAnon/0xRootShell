@@ -6,7 +6,6 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/0xrootAnon/0xRootShell/internal/audio"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -162,7 +161,11 @@ func (m Model) View() string {
 	sb.WriteString("\n")
 
 	// show last lines of outputBuf
-	maxLines := 18
+	// make visible lines dynamic based on terminal height; keep minimum sensible size
+	maxLines := m.height - 8
+	if maxLines < 6 {
+		maxLines = 6
+	}
 	start := 0
 	if len(m.outputBuf) > maxLines {
 		start = len(m.outputBuf) - maxLines
