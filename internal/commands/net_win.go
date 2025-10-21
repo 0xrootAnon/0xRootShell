@@ -9,6 +9,7 @@ import (
 	"strings"
 )
 
+// CmdNet is the entry point engine expects for "net" commands on Windows.
 func CmdNet(args []string) string {
 	if len(args) == 0 {
 		return "net: expected subcommand, e.g. `net wifi list|on|off`"
@@ -35,84 +36,78 @@ func CmdNet(args []string) string {
 	}
 }
 
-// netWifi handles wifi list/on/off
-func netWifi(args []string) string {
-	if len(args) == 0 {
-		return "net wifi: expected 'list'|'on'|'off'"
-	}
-	cmd := strings.ToLower(args[0])
-	switch cmd {
-	case "list":
-		// use netsh to list wireless interfaces
-		out, err := exec.Command("netsh", "wlan", "show", "interfaces").CombinedOutput()
-		if err == nil {
-			return string(out)
-		}
-		// fallback to PowerShell network adapter query
-		out2, err2 := exec.Command("powershell", "-Command", "Get-NetAdapter | Format-Table -Auto").CombinedOutput()
-		if err2 == nil {
-			return string(out2)
-		}
-		return "net wifi list: error: " + err.Error()
-	case "off":
-		// disable Wi-Fi adapters (best-effort)
-		// Use netsh to set interface state
-		out, err := exec.Command("powershell", "-Command", "Get-NetAdapter -Name '*Wi-Fi*' -ErrorAction SilentlyContinue | Disable-NetAdapter -Confirm:$false").CombinedOutput()
-		if err != nil {
-			return "wifi disable attempted: " + err.Error() + "\n" + string(out)
-		}
-		return "Wi-Fi disabled (attempted)."
-	case "on":
-		out, err := exec.Command("powershell", "-Command", "Get-NetAdapter -Name '*Wi-Fi*' -ErrorAction SilentlyContinue | Enable-NetAdapter -Confirm:$false").CombinedOutput()
-		if err != nil {
-			return "wifi enable attempted: " + err.Error() + "\n" + string(out)
-		}
-		return "Wi-Fi enabled (attempted)."
-	default:
-		return "net wifi: unknown subcommand"
-	}
-}
-
-// wifiList uses netsh (preferred) and falls back to PowerShell when necessary.
+// wifiList tries netsh first, then falls back to PowerShell.
 func wifiList() string {
-	// Try netsh wlan show interfaces
+	// Try netsh wlan show interfaces (preferred)
 	if out, err := exec.Command("netsh", "wlan", "show", "interfaces").CombinedOutput(); err == nil {
-		return strings.TrimSpace(string(out))
+		return sanitizeOutput(strings.TrimSpace(string(out)))
+	} else {
+		// even if err != nil, return sanitized output rather than failing the program
+		if len(out) > 0 {
+			return sanitizeOutput(strings.TrimSpace(string(out)))
+		}
 	}
-	// Fallback: PowerShell Get-NetAdapter and Get-NetConnectionProfile
-	if out, err := exec.Command("powershell", "-Command", "Get-NetAdapter | Format-Table -Auto").CombinedOutput(); err == nil {
-		return strings.TrimSpace(string(out))
+
+	// Fallback to PowerShell Get-NetAdapter table if netsh didn't produce output
+	if out2, err2 := exec.Command("powershell", "-NoProfile", "-Command", "Get-NetAdapter | Format-Table -Auto").CombinedOutput(); err2 == nil {
+		return sanitizeOutput(strings.TrimSpace(string(out2)))
+	} else {
+		if len(out2) > 0 {
+			return sanitizeOutput(strings.TrimSpace(string(out2)))
+		}
 	}
+
 	return "wifi list: failed to query adapters (requires netsh or PowerShell)."
 }
 
-// wifiToggle enables/disables Wi-Fi adapters named like "*Wi-Fi*" (best-effort).
+// wifiToggle attempts to enable/disable adapters named like "*Wi-Fi*".
 func wifiToggle(enable bool) string {
 	action := "Enable-NetAdapter"
 	if !enable {
 		action = "Disable-NetAdapter"
 	}
-	// Use PowerShell to enable/disable adapters matching Wi-Fi
-	psCmd := "Get-NetAdapter -Name '*Wi-Fi*' -ErrorAction SilentlyContinue | " + action + " -Confirm:$false"
-	out, err := exec.Command("powershell", "-Command", psCmd).CombinedOutput()
-	if err == nil {
-		return fmt.Sprintf("Wi-Fi %s attempted.\n%s", ternary(enable, "enabled", "disabled"), strings.TrimSpace(string(out)))
-	}
-	// Last-ditch: try netsh interface (interface name may differ)
-	state := "enabled"
-	if !enable {
-		state = "disabled"
-	}
-	if out2, err2 := exec.Command("netsh", "interface", "set", "interface", "name=\"Wi-Fi\"", "admin="+state).CombinedOutput(); err2 == nil {
-		return fmt.Sprintf("Wi-Fi %s attempted (netsh).", ternary(enable, "enabled", "disabled")) + "\n" + strings.TrimSpace(string(out2))
-	}
-	return fmt.Sprintf("wifi toggle: failed to %s Wi-Fi. PowerShell/netsh attempts failed: %v / %v", ternary(enable, "enable", "disable"), err, nil)
-}
 
-// small helper
-func ternary(b bool, a, c string) string {
-	if b {
-		return a
+	// PowerShell wrapper: try the action, suppress errors, then print adapter status.
+	// We force a zero exit so Go won't treat non-zero exit as an unhandled failure.
+	ps := fmt.Sprintf(`
+try {
+  $a = Get-NetAdapter -Name '*Wi-Fi*' -ErrorAction SilentlyContinue
+  if ($a) {
+    $a | %s -Confirm:$false -ErrorAction SilentlyContinue
+  } else {
+    Write-Output 'No adapter matching ''*Wi-Fi*'' found'
+  }
+} catch {
+  Write-Output $_
+}
+# then print status
+Get-NetAdapter -Name '*Wi-Fi*' -ErrorAction SilentlyContinue | Select-Object Name,Status | Out-String
+exit 0
+`, action)
+
+	out, _ := exec.Command("powershell", "-NoProfile", "-Command", ps).CombinedOutput()
+	clean := sanitizeOutput(strings.TrimSpace(string(out)))
+
+	// detect permission/elevation issues in common phrasing
+	l := strings.ToLower(clean)
+	if strings.Contains(l, "access is denied") || strings.Contains(l, "requires elevation") || strings.Contains(l, "requires administrator") {
+		return "wifi toggle failed: requires Administrator privileges. Run 0xRootShell elevated (right-click → Run as administrator) and try again."
 	}
-	return c
+
+	// if PowerShell told us "No adapter matching", return friendly guidance
+	if strings.Contains(l, "no adapter matching") || strings.Contains(l, "no adapter named") || strings.Contains(l, "no adapter") {
+		return "Wi-Fi toggle attempted: no adapter named like '*Wi-Fi*' found. Run `Get-NetAdapter` in PowerShell to see exact adapter names."
+	}
+
+	// determine textual state for the message
+	state := "disabled"
+	if enable {
+		state = "enabled"
+	}
+
+	// If `clean` contains status lines, include them; otherwise a generic message
+	if clean == "" {
+		return fmt.Sprintf("Wi-Fi %s attempted.", state)
+	}
+	return fmt.Sprintf("Wi-Fi %s attempted.\n%s", state, clean)
 }

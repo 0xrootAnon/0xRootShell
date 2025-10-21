@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/0xrootAnon/0xRootShell/internal/commands"
@@ -14,6 +15,13 @@ type Engine struct {
 	store   *store.Store
 	cwd     string // current working directory for the session
 	MsgChan chan string
+}
+
+// sanitizeForUI removes CRs and ANSI sequences before sending to the UI.
+func sanitizeForUI(s string) string {
+	s = strings.ReplaceAll(s, "\r", "")
+	ansi := regexp.MustCompile(`\x1b\[[0-9;]*[A-Za-z]`)
+	return ansi.ReplaceAllString(s, "")
 }
 
 // NewEngine now accepts a message channel the engine can use to send asynchronous messages
@@ -58,11 +66,11 @@ func (e *Engine) Execute(raw string) string {
 				if query == "" {
 					query = "(empty)"
 				}
-				e.MsgChan <- fmt.Sprintf("Searching for: %s", query)
+				e.MsgChan <- sanitizeForUI(fmt.Sprintf("Searching for: %s", query))
 				// run the existing synchronous CmdFind (safe reuse)
 				res := commands.CmdFind(a)
 				// ensure results are clearly demarcated
-				e.MsgChan <- fmt.Sprintf("=== Search results for: %s ===\n%s\n=== End results ===", query, res)
+				e.MsgChan <- sanitizeForUI(fmt.Sprintf("=== Search results for: %s ===\n%s\n=== End results ===", query, res))
 			}(qargs)
 			return "Searching... results will appear below when ready."
 		}

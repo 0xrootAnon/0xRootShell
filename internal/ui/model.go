@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -19,6 +20,7 @@ var (
 	outputStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#A8FF60"))
 	promptStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#B2FF9E"))
 	footerStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#6BFFB8")).Italic(true)
+	uiAnsiRe    = regexp.MustCompile(`\x1b\[[0-9;]*[A-Za-z]`)
 )
 
 // messages for animation ticks
@@ -58,6 +60,12 @@ type Model struct {
 
 	// async channel to receive engine messages (background results)
 	asyncCh chan string
+}
+
+func sanitizeForUI(s string) string {
+	s = strings.ReplaceAll(s, "\r", "")
+	s = uiAnsiRe.ReplaceAllString(s, "")
+	return s
 }
 
 func NewModel(st *store.Store, ascii string) Model {
@@ -126,6 +134,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				// dispatch command
 				rawOut := m.engine.Execute(val)
+				rawOut = sanitizeForUI(rawOut)
 				// prepare lines for printing
 				lines := strings.Split(rawOut, "\n")
 				m.printLines = lines
