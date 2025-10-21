@@ -28,3 +28,8 @@ This means:
 -  Any distributed modifications must also be open-source under the GPLv3 license.
 - ️ You cannot relicense, rebrand, or distribute proprietary versions of 0xRootShell.
 -  Full license text: [GNU GPLv3](https://www.gnu.org/licenses/gpl-3.0.html)
+---
+### Contributing
+
+Contributions are welcome!  
+By submitting a pull request, you agree to the [Contributor License Agreement](.github/CLA.md).
