@@ -6,7 +6,6 @@ import (
 	"time"
 )
 
-// CmdSysStatus returns a small system summary used by sys.go
 func CmdSysStatus() string {
 	var m runtime.MemStats
 	runtime.ReadMemStats(&m)

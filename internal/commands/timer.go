@@ -7,8 +7,6 @@ import (
 	"time"
 )
 
-// ScheduleTimer schedules a timer/alarm and posts a message to channel when it fires.
-// args examples: ["25m"], ["10s"], ["0630"] (HHMM)
 func ScheduleTimer(args []string, ch chan string) {
 	if ch == nil {
 		return
@@ -18,7 +16,6 @@ func ScheduleTimer(args []string, ch chan string) {
 		return
 	}
 	raw := args[0]
-	// try parse duration
 	if d, err := time.ParseDuration(raw); err == nil {
 		ch <- fmt.Sprintf("Timer set for %s from now.", d.String())
 		time.AfterFunc(d, func() {
@@ -26,7 +23,6 @@ func ScheduleTimer(args []string, ch chan string) {
 		})
 		return
 	}
-	// try parse HHMM or HH:MM
 	s := strings.ReplaceAll(raw, ":", "")
 	if len(s) == 4 {
 		hh, _ := strconv.Atoi(s[:2])
@@ -34,7 +30,6 @@ func ScheduleTimer(args []string, ch chan string) {
 		now := time.Now()
 		target := time.Date(now.Year(), now.Month(), now.Day(), hh, mm, 0, 0, now.Location())
 		if target.Before(now) {
-			// schedule for next day
 			target = target.Add(24 * time.Hour)
 		}
 		ch <- fmt.Sprintf("Alarm set for %s", target.Format("2006-01-02 15:04"))

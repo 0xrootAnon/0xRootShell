@@ -21,7 +21,6 @@ func messagesFilePath() string {
 	return filepath.Join("data", "outgoing_messages", "messages.json")
 }
 
-// appendMessage writes a message to data/outgoing_messages/messages.json
 func appendMessage(m OutgoingMsg) error {
 	fn := messagesFilePath()
 	var arr []OutgoingMsg
@@ -33,7 +32,6 @@ func appendMessage(m OutgoingMsg) error {
 	return os.WriteFile(fn, nb, 0644)
 }
 
-// CmdMessage: message send <contact> "text..."
 func CmdMessage(args []string) string {
 	if len(args) < 2 {
 		return "message: expected 'message send <contact> \"text\"'"
@@ -56,7 +54,6 @@ func CmdMessage(args []string) string {
 	return "message: unknown subcommand"
 }
 
-// CmdNotify: notify list / notify send <text>
 func CmdNotify(args []string) string {
 	if len(args) == 0 {
 		return "notify: expected subcommand list/send"
@@ -71,7 +68,6 @@ func CmdNotify(args []string) string {
 	case "send":
 		text := strings.Join(args[1:], " ")
 		text = strings.Trim(text, "\"")
-		// store as a message to outgoing_messages as a small local notification
 		msg := OutgoingMsg{
 			ID:        fmt.Sprintf("%d", time.Now().UnixNano()),
 			To:        "local",
@@ -87,7 +83,6 @@ func CmdNotify(args []string) string {
 	}
 }
 
-// CmdMail placeholder — open default mail client or show guidance
 func CmdMail(args []string) string {
 	if len(args) == 0 {
 		return "mail: expected 'check' or 'open' or 'compose'"
@@ -96,7 +91,6 @@ func CmdMail(args []string) string {
 	case "check":
 		return "mail: mail integration not configured. Consider connecting an email plugin in plugins/."
 	case "open":
-		// open default mail client
 		if err := runOpen("mailto:"); err != nil {
 			return "mail open error: " + err.Error()
 		}

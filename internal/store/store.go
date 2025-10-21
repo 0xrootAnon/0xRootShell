@@ -25,7 +25,6 @@ type HistoryEntry struct {
 }
 
 func NewStore(pathStr string) (*Store, error) {
-	//ensure directory exists
 	dir := path.Dir(pathStr)
 	if dir != "" && dir != "." {
 		_ = os.MkdirAll(dir, 0755)
@@ -35,7 +34,6 @@ func NewStore(pathStr string) (*Store, error) {
 	if err != nil {
 		return nil, err
 	}
-	//create buckets
 	err = db.Update(func(tx *bolt.Tx) error {
 		if _, e := tx.CreateBucketIfNotExists([]byte(historyBucket)); e != nil {
 			return e
@@ -59,7 +57,6 @@ func (s *Store) Close() error {
 	return s.db.Close()
 }
 
-// appends a history entry (stores by timestamp key)
 func (s *Store) SaveHistory(cmd string) error {
 	if s.db == nil {
 		return errors.New("db not opened")
@@ -76,7 +73,6 @@ func (s *Store) SaveHistory(cmd string) error {
 	})
 }
 
-// returns up to 'limit' most recent commands (newest first)
 func (s *Store) ListHistory(limit int) ([]string, error) {
 	if s.db == nil {
 		return nil, errors.New("db not opened")

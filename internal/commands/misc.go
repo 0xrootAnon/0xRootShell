@@ -7,8 +7,6 @@ import (
 	"unicode"
 )
 
-// Very small arithmetic evaluator supporting + - * / and parentheses.
-// Not intended for complex expressions, but useful for quick calculations.
 func CmdCalc(args []string) string {
 	if len(args) == 0 {
 		return "calc: expected expression, e.g. `calc 2+2*3`"
@@ -21,14 +19,12 @@ func CmdCalc(args []string) string {
 	return fmt.Sprintf("%s = %g", expr, val)
 }
 
-// Shunting-yard -> RPN -> evaluate
 func evalSimple(s string) (float64, error) {
 	type tok struct {
-		typ string // "num","op","(" , ")"
+		typ string
 		val float64
 		op  rune
 	}
-	// tokenize
 	var toks []tok
 	i := 0
 	for i < len(s) {
@@ -60,10 +56,8 @@ func evalSimple(s string) (float64, error) {
 			i++
 			continue
 		}
-		// unknown char
 		return 0, fmt.Errorf("invalid char: %c", c)
 	}
-	// shunting yard
 	outQ := []tok{}
 	opS := []tok{}
 	prec := func(r rune) int {
@@ -121,7 +115,6 @@ func evalSimple(s string) (float64, error) {
 		}
 		outQ = append(outQ, top)
 	}
-	// evaluate RPN
 	st := []float64{}
 	for _, t := range outQ {
 		if t.typ == "num" {

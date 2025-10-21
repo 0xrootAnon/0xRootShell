@@ -9,7 +9,6 @@ import (
 	"strings"
 )
 
-// CmdFile handles file subcommands like move, rename, clean
 func CmdFile(args []string) string {
 	if len(args) == 0 {
 		return "file: expected subcommand (move, rename, clean, open)"
@@ -27,7 +26,6 @@ func CmdFile(args []string) string {
 		}
 		return fileRenameBulk(args[1], args[2])
 	case "clean":
-		// example: clean temp
 		if len(args) >= 2 && args[1] == "temp" {
 			return fileCleanTemp()
 		}
@@ -43,7 +41,6 @@ func CmdFile(args []string) string {
 }
 
 func fileMove(src, dst string) string {
-	// expand ~ if present - best-effort:
 	if strings.HasPrefix(src, "~") {
 		if home, err := os.UserHomeDir(); err == nil {
 			src = filepath.Join(home, src[2:])
@@ -56,7 +53,6 @@ func fileMove(src, dst string) string {
 	}
 
 	if err := os.Rename(src, dst); err != nil {
-		// try copy+remove if rename fails (cross-device)
 		if err := copyFileOrDir(src, dst); err == nil {
 			_ = os.RemoveAll(src)
 			return fmt.Sprintf("Moved %s -> %s", src, dst)
@@ -72,7 +68,6 @@ func copyFileOrDir(src, dst string) error {
 		return err
 	}
 	if info.IsDir() {
-		// create dst
 		if err := os.MkdirAll(dst, 0755); err != nil {
 			return err
 		}
@@ -84,7 +79,6 @@ func copyFileOrDir(src, dst string) error {
 		}
 		return nil
 	}
-	// file copy
 	in, err := os.Open(src)
 	if err != nil {
 		return err
@@ -105,7 +99,6 @@ func copyFileOrDir(src, dst string) error {
 }
 
 func fileRenameBulk(pattern, repl string) string {
-	// support simple glob patterns
 	matches, err := filepath.Glob(pattern)
 	if err != nil {
 		return "rename: invalid pattern"
@@ -117,7 +110,6 @@ func fileRenameBulk(pattern, repl string) string {
 		dir := filepath.Dir(p)
 		ext := filepath.Ext(p)
 		base := strings.TrimSuffix(filepath.Base(p), ext)
-		// repl may include # placeholder for index, or {name}
 		target := repl
 		target = strings.ReplaceAll(target, "#", fmt.Sprintf("%d", i+1))
 		target = strings.ReplaceAll(target, "{name}", base)
@@ -131,8 +123,6 @@ func fileRenameBulk(pattern, repl string) string {
 
 func fileCleanTemp() string {
 	tmp := os.TempDir()
-	// Safety: require explicit confirm? For now we return a message and list top-level temp files,
-	// and instruct user to run `file clean temp --confirm` to actually delete (TODO).
 	entries, err := os.ReadDir(tmp)
 	if err != nil {
 		return "clean temp: " + err.Error()
@@ -150,11 +140,7 @@ func fileCleanTemp() string {
 	return strings.Join(out, "\n")
 }
 
-// CmdCompressArchive handles compress/extract basic flows
 func CmdCompressArchive(args []string) string {
-	// Accept forms:
-	// compress <zip> <src>  -> compress src into zip
-	// extract <zip> <dst>  -> extract zip into dst
 	if len(args) == 0 {
 		return "compress: usage: compress <out.zip> <src-dir-or-file> | extract <in.zip> <dst>"
 	}

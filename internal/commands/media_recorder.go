@@ -10,8 +10,6 @@ import (
 	"time"
 )
 
-// CmdMediaControl: best-effort stub for pause/next/prev (not a universal API).
-// This avoids duplicating your existing media controls (if any).
 func CmdMediaControl(args []string) string {
 	if len(args) == 0 {
 		return "media control: expected pause/next/prev"
@@ -27,9 +25,6 @@ func CmdMediaControl(args []string) string {
 	}
 }
 
-// CmdRecord: record screen or webcam using ffmpeg if available.
-// Usage: record screen 10s  OR record cam 15s  OR record screen out.mp4
-// Note: This does only the recording logic; it does not override any existing CmdPlay/CmdSearch.
 func CmdRecord(args []string) string {
 	if len(args) == 0 {
 		return "record: expected 'screen' or 'cam' and optional duration (seconds) or output filename"
@@ -38,13 +33,11 @@ func CmdRecord(args []string) string {
 	duration := 0
 	outName := ""
 
-	// heuristic parse of rest of args
 	for _, a := range args[1:] {
 		if strings.HasSuffix(a, ".mp4") || strings.HasSuffix(a, ".mkv") || strings.HasSuffix(a, ".webm") {
 			outName = a
 			continue
 		}
-		// try parse integer seconds
 		var secs int
 		if n, err := fmt.Sscanf(a, "%d", &secs); n == 1 && err == nil {
 			duration = secs
@@ -65,13 +58,11 @@ func CmdRecord(args []string) string {
 		var cmd *exec.Cmd
 		if mode == "cam" {
 			if runtime.GOOS == "windows" {
-				// device name may vary; this is best-effort placeholder
 				cmd = exec.Command(p, "-f", "dshow", "-i", "video=Integrated Camera", "-t", fmt.Sprintf("%d", duration), outName)
 			} else {
 				cmd = exec.Command(p, "-f", "v4l2", "-i", "/dev/video0", "-t", fmt.Sprintf("%d", duration), outName)
 			}
 		} else {
-			// screen recording
 			if runtime.GOOS == "windows" {
 				args := []string{"-f", "gdigrab", "-framerate", "20", "-i", "desktop"}
 				if duration > 0 {

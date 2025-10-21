@@ -9,10 +9,9 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/itchyny/volume-go" // add this dependency
+	"github.com/itchyny/volume-go"
 )
 
-// CmdAudio supports: audio vol <0-100>, audio mute, audio unmute
 func CmdAudio(args []string) string {
 	if len(args) == 0 {
 		return "audio: expected subcommand e.g. 'audio vol 50' or 'audio mute'"
@@ -34,11 +33,9 @@ func CmdAudio(args []string) string {
 		if n > 100 {
 			n = 100
 		}
-		// Try native Go lib first
 		if err := volume.SetVolume(n); err == nil {
 			return fmt.Sprintf("Volume set to %d%%", n)
 		}
-		// fallback to nircmd if installed
 		if p, err := exec.LookPath("nircmd.exe"); err == nil {
 			abs := int(float64(n) / 100.0 * 65535.0)
 			cmd := exec.Command(p, "setsysvolume", strconv.Itoa(abs))
@@ -46,7 +43,6 @@ func CmdAudio(args []string) string {
 				return fmt.Sprintf("Volume set to %d%% (nircmd)", n)
 			}
 		}
-		// last fallback: instruct user
 		return "audio vol: failed to set volume. Install volume-go support or nircmd (https://www.nirsoft.net/utils/nircmd.html)."
 
 	case "mute":
@@ -57,7 +53,6 @@ func CmdAudio(args []string) string {
 			_ = exec.Command(p, "mutesysvolume", "1").Run()
 			return "Audio muted (nircmd)"
 		}
-		// PowerShell best-effort: not reliable without modules
 		_ = exec.Command("powershell", "-Command", "Set-AudioDevice -Mute $true").Run()
 		return "Audio mute attempted (PowerShell fallback)."
 

@@ -13,30 +13,24 @@ import (
 
 type Engine struct {
 	store   *store.Store
-	cwd     string // current working directory for the session
+	cwd     string
 	MsgChan chan string
 }
 
-// sanitizeForUI removes CRs and ANSI sequences before sending to the UI.
 func sanitizeForUI(s string) string {
 	s = strings.ReplaceAll(s, "\r", "")
 	ansi := regexp.MustCompile(`\x1b\[[0-9;]*[A-Za-z]`)
 	return ansi.ReplaceAllString(s, "")
 }
 
-// NewEngine now accepts a message channel the engine can use to send asynchronous messages
-// back to the UI (e.g., background find results).
 func NewEngine(s *store.Store, ch chan string) *Engine {
 	wd, err := os.Getwd()
 	if err != nil {
-		wd = "." // fallback
+		wd = "."
 	}
 	return &Engine{store: s, cwd: wd, MsgChan: ch}
 }
 
-// Execute parses the input and dispatches to the appropriate handler.
-// For potentially long-running commands like "find" we run them in a goroutine
-// and send results back over the engine message channel so the UI remains responsive.
 func (e *Engine) Execute(raw string) string {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
@@ -56,25 +50,19 @@ func (e *Engine) Execute(raw string) string {
 	case "open":
 		return commands.CmdOpen(args)
 	case "find", "searchfile":
-		// run find in background and send results back to UI via MsgChan
 		if e.MsgChan != nil {
-			// capture values for goroutine
 			qargs := append([]string(nil), args...)
 			go func(a []string) {
-				// initial notice
 				query := strings.Join(a, " ")
 				if query == "" {
 					query = "(empty)"
 				}
 				e.MsgChan <- sanitizeForUI(fmt.Sprintf("Searching for: %s", query))
-				// run the existing synchronous CmdFind (safe reuse)
 				res := commands.CmdFind(a)
-				// ensure results are clearly demarcated
 				e.MsgChan <- sanitizeForUI(fmt.Sprintf("=== Search results for: %s ===\n%s\n=== End results ===", query, res))
 			}(qargs)
 			return "Searching... results will appear below when ready."
 		}
-		// fallback synchronous behavior if no message channel
 		return commands.CmdFind(args)
 	case "sys":
 		return commands.CmdSys(args)
@@ -100,35 +88,33 @@ func (e *Engine) Execute(raw string) string {
 		h, _ := e.store.ListHistory(30)
 		return strings.Join(h, "\n")
 	case "weather":
-		return commands.CmdWeather(args) // opens browser with weather search
+		return commands.CmdWeather(args)
 	case "convert", "currency":
-		return commands.CmdConvert(args) // currency conversion via web search
+		return commands.CmdConvert(args)
 	case "news":
-		return commands.CmdNews(args) // open news search
+		return commands.CmdNews(args)
 	case "message", "msg":
-		return commands.CmdMessage(args) // local/outgoing-message queue or plugin hook
+		return commands.CmdMessage(args)
 	case "mail":
-		return commands.CmdMail(args) // placeholder / open mail client
+		return commands.CmdMail(args)
 	case "notify":
-		return commands.CmdNotify(args) // list / create notifications (local)
+		return commands.CmdNotify(args)
 	case "play":
-		return commands.CmdPlay(args) // play file/url; spawns ffmpeg/player if needed
+		return commands.CmdPlay(args)
 	case "pause", "next", "prev":
 		return commands.CmdMediaControl(append([]string{verb}, args...))
 	case "record":
-		// run screen/cam recording in background and report when done
 		if e.MsgChan != nil {
 			qargs := append([]string(nil), args...)
 			go func(a []string) {
 				e.MsgChan <- "Starting recording..."
-				res := commands.CmdRecord(a) // new commands file; returns result message
+				res := commands.CmdRecord(a)
 				e.MsgChan <- res
 			}(qargs)
 			return "Recording started..."
 		}
 		return commands.CmdRecord(args)
 	case "alarm", "timer":
-		// schedule a timer/alarm in background using engine message channel
 		if e.MsgChan != nil {
 			go commands.ScheduleTimer(args, e.MsgChan)
 			return "Timer scheduled."
@@ -169,10 +155,6 @@ Common commands:
 `
 }
 
-// The rest of the engine code (splitArgs, CmdCd, CmdPwd, etc.) remains unchanged.
-// We'll include the existing implementations for splitArgs, CmdPwd, and CmdCd below,
-// copied from your previous engine implementation for completeness.
-
 func splitArgs(s string) []string {
 	var out []string
 	var cur strings.Builder
@@ -198,24 +180,13 @@ func splitArgs(s string) []string {
 	return out
 }
 
-/***dir commands ***/
-
-// returns the engine's current working directory.
 func (e *Engine) CmdPwd() string {
-	//use filepath.Clean for consistent separators
 	return filepath.Clean(e.cwd)
 }
 
-// Supports:
-//
-//	cd relative/path
-//	cd /absolute/path
-//	cd ~ (home dir)
-//	cd .. etc.
 func (e *Engine) CmdCd(args []string) string {
 	target := ""
 	if len(args) == 0 || args[0] == "" {
-		//no args -> go to home dir
 		home, err := os.UserHomeDir()
 		if err != nil {
 			return "cd: cannot determine home directory"
@@ -225,7 +196,6 @@ func (e *Engine) CmdCd(args []string) string {
 		target = args[0]
 	}
 
-	//expand ~
 	if strings.HasPrefix(target, "~") {
 		home, err := os.UserHomeDir()
 		if err != nil {
@@ -234,19 +204,16 @@ func (e *Engine) CmdCd(args []string) string {
 		if target == "~" {
 			target = home
 		} else if strings.HasPrefix(target, "~/") || strings.HasPrefix(target, `~\`) {
-			target = filepath.Join(home, target[2:]) // remove "~/"
+			target = filepath.Join(home, target[2:])
 		}
 	}
 
-	//if relative path -> join with current cwd
 	if !filepath.IsAbs(target) {
 		target = filepath.Join(e.cwd, target)
 	}
 
-	//clean path
 	target = filepath.Clean(target)
 
-	//check existence and directory
 	info, err := os.Stat(target)
 	if err != nil {
 		return fmt.Sprintf("cd: %s: %v", target, err)
@@ -255,12 +222,10 @@ func (e *Engine) CmdCd(args []string) string {
 		return fmt.Sprintf("cd: %s: not a directory", target)
 	}
 
-	//attempt to change process working directory
 	if err := os.Chdir(target); err != nil {
 		return fmt.Sprintf("cd: failed to change directory: %v", err)
 	}
 
-	//update engine cwd
 	e.cwd = target
-	return "" //success -> empty output (shell convention)
+	return ""
 }

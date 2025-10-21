@@ -19,10 +19,8 @@ type Reminder struct {
 
 const remindersFile = "data/reminders.json"
 
-// loadReminders reads reminders file (returns empty list if missing)
 func loadReminders() ([]Reminder, error) {
 	path := remindersFile
-	// ensure data dir exists
 	dir := filepath.Dir(path)
 	if dir != "" && dir != "." {
 		_ = os.MkdirAll(dir, 0755)
@@ -54,35 +52,28 @@ func saveReminders(r []Reminder) error {
 	return os.WriteFile(path, b, 0644)
 }
 
-// parseOptionalTime attempts to parse the last token as a datetime in "2006-01-02" or "2006-01-02 15:04" formats.
-// Returns (time, consumed) where consumed==true if a time token was parsed.
 func parseOptionalTime(tokens []string) (time.Time, bool) {
 	if len(tokens) == 0 {
 		return time.Time{}, false
 	}
 	last := tokens[len(tokens)-1]
-	// try "YYYY-MM-DD" first
 	if t, err := time.Parse("2006-01-02", last); err == nil {
 		return t, true
 	}
-	// try "YYYY-MM-DD_HH:MM" or "YYYY-MM-DD HH:MM"
 	if strings.Contains(last, "_") {
 		last = strings.ReplaceAll(last, "_", " ")
 	}
 	if t, err := time.Parse("2006-01-02 15:04", last); err == nil {
 		return t, true
 	}
-	// try RFC3339
 	if t, err := time.Parse(time.RFC3339, last); err == nil {
 		return t, true
 	}
 	return time.Time{}, false
 }
 
-// CmdRemind implements reminders CLI: add/list/rm/clear
 func CmdRemind(args []string) string {
 	if len(args) == 0 {
-		// list by default (legacy friendly)
 		return remindList()
 	}
 	sub := strings.ToLower(args[0])
@@ -91,12 +82,10 @@ func CmdRemind(args []string) string {
 		if len(args) < 2 {
 			return "remind add: expected text. Example: `remind add \"call mom\" 2025-10-21 20:00`"
 		}
-		// join rest tokens and optionally parse time
 		toks := args[1:]
 		due, consumed := parseOptionalTime(toks)
 		text := strings.Join(toks, " ")
 		if consumed {
-			// remove last token from text
 			text = strings.Join(toks[:len(toks)-1], " ")
 		}
 		return remindAdd(text, due)
@@ -110,8 +99,6 @@ func CmdRemind(args []string) string {
 	case "clear":
 		return remindClear()
 	default:
-		// fallback: treat as quick add: remind pay rent 2025-10-21 20:00
-		// allow "remind pay rent" to add with no due
 		toks := args
 		due, consumed := parseOptionalTime(toks)
 		text := strings.Join(toks, " ")
@@ -157,14 +144,11 @@ func remindList() string {
 	if len(rem) == 0 {
 		return "No reminders."
 	}
-	// sort by due then created (simple)
-	// (lightweight bubble-ish sort because list is small)
 	for i := 0; i < len(rem)-1; i++ {
 		for j := i + 1; j < len(rem); j++ {
 			ti := rem[i].Due
 			tj := rem[j].Due
 			if ti.IsZero() && !tj.IsZero() {
-				// j earlier
 				rem[i], rem[j] = rem[j], rem[i]
 			} else if !ti.IsZero() && !tj.IsZero() && rem[j].Due.Before(rem[i].Due) {
 				rem[i], rem[j] = rem[j], rem[i]

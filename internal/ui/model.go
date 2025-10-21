@@ -3,6 +3,7 @@ package ui
 import (
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -23,13 +24,11 @@ var (
 	uiAnsiRe    = regexp.MustCompile(`\x1b\[[0-9;]*[A-Za-z]`)
 )
 
-// messages for animation ticks
 type tickMsg time.Time
 
 type bootDoneMsg struct{}
 type printDoneMsg struct{}
 
-// asyncMsg is used when the engine sends asynchronous strings (e.g., find results)
 type asyncMsg string
 
 type Model struct {
@@ -42,24 +41,23 @@ type Model struct {
 	width     int
 	height    int
 
-	// boot animation state
 	booting       bool
-	bootLines     []string // lines to reveal at startup
+	bootLines     []string
 	bootLineIndex int
 	bootCharIndex int
 
-	// command/output typing state
 	printing       bool
-	printLines     []string // lines being printed for the current command
+	printLines     []string
 	printLineIndex int
 	printCharIndex int
 
-	// index in outputBuf where the first placeholder for the current printing session is located.
-	// when not printing, set to -1.
 	printPlaceholderIdx int
 
-	// async channel to receive engine messages (background results)
 	asyncCh chan string
+
+	passwordMode       bool
+	passwordTargetIdx  int
+	passwordTargetSSID string
 }
 
 func sanitizeForUI(s string) string {
@@ -83,7 +81,6 @@ func NewModel(st *store.Store, ascii string) Model {
 		"Ready.",
 	}
 
-	// create message channel for engine -> UI communication
 	ch := make(chan string, 16)
 
 	m := Model{
@@ -100,7 +97,6 @@ func NewModel(st *store.Store, ascii string) Model {
 }
 
 func (m Model) Init() tea.Cmd {
-	// start both the boot tick and the async listener
 	return tea.Batch(bootTickCmd(), listenCmd(m.asyncCh))
 }
 
@@ -111,7 +107,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tickMsg:
 		return m.handleTick()
 	case asyncMsg:
-		// append the async message to output buffer and re-arm the listener
 		m.outputBuf = append(m.outputBuf, string(msg))
 		return m, listenCmd(m.asyncCh)
 	case tea.WindowSizeMsg:
@@ -123,37 +118,82 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		case "enter":
 			if m.booting || m.printing {
-				// ignore enter while animating
 				return m, nil
 			}
-			val := strings.TrimSpace(m.input.Value())
-			if val != "" {
-				// save to history
-				if err := m.store.SaveHistory(val); err != nil {
+
+			if m.passwordMode {
+				pwd := strings.TrimSpace(m.input.Value())
+				m.input.SetValue("")
+				if setter, ok := interface{}(&m.input).(interface {
+					SetEchoMode(int)
+					SetEchoCharacter(rune)
+				}); ok {
+					setter.SetEchoMode(0)
+					setter.SetEchoCharacter('*')
+				}
+
+				m.passwordMode = false
+
+				cmdline := fmt.Sprintf("net wifi connect %d %s", m.passwordTargetIdx+1, pwd)
+				if err := m.store.SaveHistory(cmdline); err != nil {
 					m.outputBuf = append(m.outputBuf, "history save error: "+err.Error())
 				}
-				// dispatch command
-				rawOut := m.engine.Execute(val)
-				rawOut = sanitizeForUI(rawOut)
-				// prepare lines for printing
+				rawOut := m.engine.Execute(cmdline)
+
 				lines := strings.Split(rawOut, "\n")
 				m.printLines = lines
 				m.printLineIndex = 0
 				m.printCharIndex = 0
 				m.printing = true
-				// push the command line
+				m.outputBuf = append(m.outputBuf, fmt.Sprintf("> %s", cmdline))
+				m.outputBuf = append(m.outputBuf, "")
+				m.printPlaceholderIdx = len(m.outputBuf) - 1
+				return m, printTickCmd()
+			}
+
+			val := strings.TrimSpace(m.input.Value())
+			if val != "" {
+				if err := m.store.SaveHistory(val); err != nil {
+					m.outputBuf = append(m.outputBuf, "history save error: "+err.Error())
+				}
+				rawOut := m.engine.Execute(val)
+
+				if strings.HasPrefix(rawOut, "PROMPT_PASSWORD:") {
+					parts := strings.SplitN(rawOut[len("PROMPT_PASSWORD:"):], ":", 2)
+					if len(parts) == 2 {
+						i, _ := strconv.Atoi(parts[0])
+						m.passwordTargetIdx = i
+						m.passwordTargetSSID = parts[1]
+						m.passwordMode = true
+						m.input.SetValue("")
+
+						if setter, ok := interface{}(&m.input).(interface {
+							SetEchoMode(int)
+							SetEchoCharacter(rune)
+						}); ok {
+							setter.SetEchoMode(1)
+							setter.SetEchoCharacter('*')
+						}
+						m.outputBuf = append(m.outputBuf, fmt.Sprintf("> %s", val))
+						m.outputBuf = append(m.outputBuf, fmt.Sprintf("(enter password for '%s')", m.passwordTargetSSID))
+						return m, nil
+					}
+				}
+
+				lines := strings.Split(rawOut, "\n")
+				m.printLines = lines
+				m.printLineIndex = 0
+				m.printCharIndex = 0
+				m.printing = true
 				m.outputBuf = append(m.outputBuf, fmt.Sprintf("> %s", val))
-				// append the first placeholder and record its index
-				m.outputBuf = append(m.outputBuf, "") // placeholder for first printed output line
+				m.outputBuf = append(m.outputBuf, "")
 				m.printPlaceholderIdx = len(m.outputBuf) - 1
 				m.input.SetValue("")
-				// start printing ticks
 				return m, printTickCmd()
 			}
 		}
 	}
 
-	// allow text input to process typing keys only if not booting/printing
 	if !m.booting && !m.printing {
 		m.input, cmd = m.input.Update(msg)
 	}
@@ -164,13 +204,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 func (m Model) View() string {
 	sb := &strings.Builder{}
 
-	// center ascii art
 	art := centerArt(m.ascii, m.width)
 	sb.WriteString(artStyle.Render(art))
 	sb.WriteString("\n")
 
-	// show last lines of outputBuf
-	// make visible lines dynamic based on terminal height; keep minimum sensible size
 	maxLines := m.height - 8
 	if maxLines < 6 {
 		maxLines = 6
@@ -183,7 +220,6 @@ func (m Model) View() string {
 		sb.WriteString(line + "\n")
 	}
 
-	// prompt (disabled look when booting/printing)
 	if m.booting || m.printing {
 		sb.WriteString("\n" + promptStyle.Render("> ") + "(initializing...)" + "\n\n")
 	} else {
@@ -214,8 +250,6 @@ func centerArt(ascii string, width int) string {
 	return b.String()
 }
 
-/*** animation tick helpers ***/
-
 func bootTickCmd() tea.Cmd {
 	return tea.Tick(30*time.Millisecond, func(t time.Time) tea.Msg {
 		return tickMsg(t)
@@ -228,9 +262,6 @@ func printTickCmd() tea.Cmd {
 	})
 }
 
-// listenCmd returns a tea.Cmd which waits for one message on the channel and
-// converts it into an asyncMsg for the main Update loop. After receiving one
-// message the Update handler re-arms the listener by returning listenCmd again.
 func listenCmd(ch <-chan string) tea.Cmd {
 	return func() tea.Msg {
 		s, ok := <-ch
@@ -242,7 +273,6 @@ func listenCmd(ch <-chan string) tea.Cmd {
 }
 
 func (m Model) handleTick() (tea.Model, tea.Cmd) {
-	// boot sequence
 	if m.booting {
 		if m.bootLineIndex >= len(m.bootLines) {
 			m.booting = false
@@ -252,7 +282,7 @@ func (m Model) handleTick() (tea.Model, tea.Cmd) {
 		line := m.bootLines[m.bootLineIndex]
 		runes := []rune(line)
 		if m.bootCharIndex == 0 {
-			m.outputBuf = append(m.outputBuf, "") // placeholder
+			m.outputBuf = append(m.outputBuf, "")
 		}
 		if len(m.outputBuf) == 0 {
 			m.outputBuf = append(m.outputBuf, "")
@@ -270,15 +300,12 @@ func (m Model) handleTick() (tea.Model, tea.Cmd) {
 		return m, tea.Tick(300*time.Millisecond, func(t time.Time) tea.Msg { return tickMsg(t) })
 	}
 
-	// printing command output
 	if m.printing {
-		// safety
 		if len(m.printLines) == 0 {
 			m.printing = false
 			m.printPlaceholderIdx = -1
 			return m, nil
 		}
-		// finished all lines
 		if m.printLineIndex >= len(m.printLines) {
 			m.printing = false
 			m.printPlaceholderIdx = -1
@@ -288,36 +315,27 @@ func (m Model) handleTick() (tea.Model, tea.Cmd) {
 		currLine := m.printLines[m.printLineIndex]
 		runes := []rune(currLine)
 
-		// compute placeholder index robustly using recorded base index
 		placeholderIdx := m.printPlaceholderIdx + m.printLineIndex
-		// safety: if placeholder index is out of bounds, append placeholders until it exists
 		for placeholderIdx >= len(m.outputBuf) {
 			m.outputBuf = append(m.outputBuf, "")
 		}
-		// current printed runes for this line:
 		curRunes := []rune(m.outputBuf[placeholderIdx])
 		if m.printCharIndex < len(runes) {
 			curRunes = append(curRunes, runes[m.printCharIndex])
 			m.outputBuf[placeholderIdx] = string(curRunes)
-			// play typewriter beep (non-blocking)
 			m.printCharIndex++
-			// schedule next char tick
 			return m, printTickCmd()
 		}
-		// finished this line
 		m.printLineIndex++
 		m.printCharIndex = 0
-		// if there are more lines, append a new placeholder (which keeps printPlaceholderIdx correct)
 		if m.printLineIndex < len(m.printLines) {
 			m.outputBuf = append(m.outputBuf, "")
 			return m, tea.Tick(120*time.Millisecond, func(t time.Time) tea.Msg { return tickMsg(t) })
 		}
-		// all printed
 		m.printing = false
 		m.printPlaceholderIdx = -1
 		return m, nil
 	}
 
-	// nothing
 	return m, nil
 }

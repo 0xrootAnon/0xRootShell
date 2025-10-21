@@ -11,11 +11,6 @@ import (
 	"strings"
 )
 
-// CmdAudio handles basic audio operations:
-//
-//	audio vol <0-100>
-//	audio mute
-//	audio unmute
 func CmdAudio(args []string) string {
 	if len(args) == 0 {
 		return "audio: expected subcommand: vol <0-100> | mute | unmute"
@@ -44,7 +39,6 @@ func CmdAudio(args []string) string {
 func audioMute(mute bool) string {
 	switch runtime.GOOS {
 	case "windows":
-		// prefer nircmd if installed
 		if p, _ := exec.LookPath("nircmd"); p != "" {
 			arg := "mutesysvolume"
 			val := "1"
@@ -62,7 +56,6 @@ func audioMute(mute bool) string {
 		}
 		return "audio mute: nircmd not found. Download from https://www.nirsoft.net/utils/nircmd.html and put nircmd.exe in PATH."
 	case "darwin":
-		// macOS: use AppleScript to mute/unmute
 		val := "set volume with output muted"
 		if !mute {
 			val = "set volume without output muted"
@@ -76,14 +69,12 @@ func audioMute(mute bool) string {
 		}
 		return "Audio unmuted (macOS)."
 	default:
-		// Linux: try pactl then amixer
 		if p, _ := exec.LookPath("pactl"); p != "" {
 			action := "set-sink-mute"
 			val := "1"
 			if !mute {
 				val = "0"
 			}
-			// default sink
 			cmd := exec.Command(p, action, "@DEFAULT_SINK@", val)
 			if out, err := cmd.CombinedOutput(); err == nil {
 				if mute {
@@ -117,7 +108,6 @@ func audioMute(mute bool) string {
 func audioSetVolume(pct int) string {
 	switch runtime.GOOS {
 	case "windows":
-		// nircmd accepts integer volume 0..65535 for setsysvolume
 		if p, _ := exec.LookPath("nircmd"); p != "" {
 			val := int((65535 * pct) / 100)
 			cmd := exec.Command(p, "setsysvolume", strconv.Itoa(val))
@@ -128,7 +118,6 @@ func audioSetVolume(pct int) string {
 		}
 		return "audio vol: nircmd not found. Install nircmd and place nircmd.exe in PATH."
 	case "darwin":
-		// macOS: use AppleScript to set output volume 0-100
 		script := fmt.Sprintf("set volume output volume %d", pct)
 		cmd := exec.Command("osascript", "-e", script)
 		if out, err := cmd.CombinedOutput(); err != nil {
@@ -136,7 +125,6 @@ func audioSetVolume(pct int) string {
 		}
 		return fmt.Sprintf("Volume set to %d%% (macOS).", pct)
 	default:
-		// Linux: try pactl then amixer
 		if p, _ := exec.LookPath("pactl"); p != "" {
 			val := fmt.Sprintf("%d%%", pct)
 			cmd := exec.Command(p, "set-sink-volume", "@DEFAULT_SINK@", val)

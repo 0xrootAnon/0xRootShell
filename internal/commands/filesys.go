@@ -10,7 +10,6 @@ import (
 	"time"
 )
 
-// CmdLS: quick directory listing
 func CmdLS(args []string) string {
 	dir := "."
 	if len(args) > 0 && args[0] != "" {
@@ -48,7 +47,6 @@ func CmdLS(args []string) string {
 		out = append(out, ent{Name: e.Name(), Size: fi.Size(), Time: fi.ModTime(), Dir: e.IsDir()})
 	}
 	sort.Slice(out, func(i, j int) bool {
-		// directories first
 		if out[i].Dir != out[j].Dir {
 			return out[i].Dir
 		}
@@ -65,7 +63,6 @@ func CmdLS(args []string) string {
 	return b.String()
 }
 
-// ensure safeExists already present in commands.go
 func SafeWalk(root, pattern string, timeoutSecs int) ([]string, error) {
 	col := []string{}
 	start := time.Now()

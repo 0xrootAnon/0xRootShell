@@ -6,7 +6,6 @@ import (
 	"strings"
 )
 
-// CmdSys handles sys subcommands: status, lock, sleep, off, bootlog, update
 func CmdSys(args []string) string {
 	if len(args) == 0 {
 		return "sys: expected 'sys status|lock|sleep|off|bootlog|update'"
@@ -20,7 +19,6 @@ func CmdSys(args []string) string {
 	case "sleep":
 		return sysSleep()
 	case "off", "shutdown":
-		// require explicit --confirm
 		for _, a := range args {
 			if a == "--confirm" || a == "-y" {
 				return sysShutdown()

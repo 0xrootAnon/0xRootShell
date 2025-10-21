@@ -14,9 +14,6 @@ import (
 	"github.com/skratchdot/open-golang/open"
 )
 
-// --- Helpers ---------------------------------------------------------------
-
-// expandPath expands ~ and returns a cleaned path (does not check existence).
 func expandPath(p string) string {
 	if p == "" {
 		return p
@@ -39,7 +36,6 @@ func looksLikeURL(s string) bool {
 	if strings.Contains(s, "://") {
 		return true
 	}
-	// bare domain e.g. reddit.com
 	if strings.Contains(s, ".") && !strings.ContainsAny(s, `/\`) {
 		return true
 	}
@@ -56,15 +52,12 @@ func prependHTTPSIfNeeded(s string) string {
 	return "https://" + s
 }
 
-// runOpen attempts to open a URL/path using open.Run and OS fallbacks.
 func runOpen(target string) error {
 	if err := open.Run(target); err == nil {
 		return nil
 	}
 
-	// fallback OS-specific attempts
 	if runtime.GOOS == "windows" {
-		// cmd /C start "" <target>
 		cmd := exec.Command("cmd", "/C", "start", "", target)
 		return cmd.Start()
 	}
@@ -72,7 +65,6 @@ func runOpen(target string) error {
 		cmd := exec.Command("open", target)
 		return cmd.Start()
 	}
-	// assume linux
 	cmd := exec.Command("xdg-open", target)
 	return cmd.Start()
 }
@@ -82,16 +74,12 @@ func safeExists(path string) bool {
 	return err == nil
 }
 
-// --- Public commands implemented in this file -----------------------------
-
-// CmdLaunch: launch an app or open a URL/path. Returns a user-facing string.
 func CmdLaunch(args []string) string {
 	if len(args) == 0 {
 		return "launch: expected an app name or URL, e.g. `launch chrome` or `launch https://example.com`"
 	}
 	target := strings.Join(args, " ")
 
-	// If it looks like a URL, normalize and open it.
 	if looksLikeURL(target) {
 		target = prependHTTPSIfNeeded(target)
 		if err := runOpen(target); err != nil {
@@ -100,12 +88,9 @@ func CmdLaunch(args []string) string {
 		return fmt.Sprintf("Launching %s...", target)
 	}
 
-	// Expand ~ and check for path-like target.
 	targetExpanded := expandPath(target)
 
-	// If path-like (contains separators) or exists, try to open directly.
 	if strings.ContainsAny(targetExpanded, `/\`) || safeExists(targetExpanded) {
-		// make absolute if possible
 		if !filepath.IsAbs(targetExpanded) {
 			if wd, err := os.Getwd(); err == nil {
 				targetExpanded = filepath.Join(wd, targetExpanded)
@@ -119,11 +104,9 @@ func CmdLaunch(args []string) string {
 		}
 	}
 
-	// Otherwise, try to exec it as a program (PATH).
 	parts := strings.Fields(target)
 	cmd := exec.Command(parts[0], parts[1:]...)
 	if err := cmd.Start(); err != nil {
-		// last-ditch: try open.Run which may call shell associations
 		if err2 := runOpen(target); err2 == nil {
 			return fmt.Sprintf("Launching %s...", target)
 		}
@@ -132,19 +115,15 @@ func CmdLaunch(args []string) string {
 	return fmt.Sprintf("Launching %s...", target)
 }
 
-// CmdOpen: open a file or URL with the default app.
 func CmdOpen(args []string) string {
 	if len(args) == 0 {
 		return "open: expected a file or url, e.g. `open ~/Downloads` or `open reddit.com`"
 	}
 	target := strings.Join(args, " ")
 
-	// expand path first so local files are preferred over naive URL detection
 	target = expandPath(target)
 
-	// If a local file exists (relative or absolute), prefer opening it.
 	if !strings.Contains(target, "://") {
-		// try relative to cwd
 		if !filepath.IsAbs(target) {
 			if wd, err := os.Getwd(); err == nil {
 				try := filepath.Join(wd, target)
@@ -161,7 +140,6 @@ func CmdOpen(args []string) string {
 		}
 	}
 
-	// URL?
 	if looksLikeURL(target) {
 		target = prependHTTPSIfNeeded(target)
 		if err := runOpen(target); err != nil {
@@ -170,9 +148,6 @@ func CmdOpen(args []string) string {
 		return fmt.Sprintf("Opened %s", target)
 	}
 
-	// rest of original logic continues...
-
-	// URL?
 	if looksLikeURL(target) {
 		target = prependHTTPSIfNeeded(target)
 		if err := runOpen(target); err != nil {
@@ -181,10 +156,8 @@ func CmdOpen(args []string) string {
 		return fmt.Sprintf("Opened %s", target)
 	}
 
-	// expand path
 	target = expandPath(target)
 
-	// if relative -> try relative to cwd
 	if !filepath.IsAbs(target) {
 		if wd, err := os.Getwd(); err == nil {
 			try := filepath.Join(wd, target)
@@ -194,7 +167,6 @@ func CmdOpen(args []string) string {
 		}
 	}
 
-	// If still doesn't exist and looks like a short alias, try common folders
 	if !safeExists(target) && !strings.ContainsAny(target, `/\`) {
 		home, _ := os.UserHomeDir()
 		aliases := map[string]string{
@@ -221,14 +193,11 @@ func CmdOpen(args []string) string {
 	return fmt.Sprintf("Opened %s", target)
 }
 
-// CmdFind: fuzzy file search. By default searches the user's home directory for speed.
-// Pass --all to scan root (may be slow).
 func CmdFind(args []string) string {
 	if len(args) == 0 {
 		return "find: expected search pattern, e.g. `find resume`"
 	}
 
-	// parse flags
 	all := false
 	parts := []string{}
 	for _, a := range args {
@@ -243,9 +212,7 @@ func CmdFind(args []string) string {
 		return "find: empty pattern"
 	}
 
-	// quick direct-existence checks:
 	wd, _ := os.Getwd()
-	// If the first arg looks like a path (contains / or \) try that exact path first
 	if len(parts) > 0 && strings.ContainsAny(parts[0], `/\`) {
 		candidate := expandPath(parts[0])
 		if !filepath.IsAbs(candidate) {
@@ -256,13 +223,11 @@ func CmdFind(args []string) string {
 		}
 	}
 
-	// If pattern looks like a filename (contains a dot), try a fast local search in cwd.
 	if strings.Contains(pattern, ".") {
 		quickResults := []string{}
 		limit := 200
 		start := time.Now()
 		_ = filepath.WalkDir(wd, func(path string, d os.DirEntry, err error) error {
-			// quick local limit (3s)
 			if time.Since(start) > 3*time.Second {
 				return filepath.SkipDir
 			}
@@ -276,7 +241,6 @@ func CmdFind(args []string) string {
 					return filepath.SkipDir
 				}
 			}
-			// protect from extremely long names
 			if utf8.RuneCountInString(path) > 400 {
 				return nil
 			}
@@ -290,7 +254,6 @@ func CmdFind(args []string) string {
 		}
 	}
 
-	// Default root for search: home or explicit root if --all requested.
 	root := "."
 	if all {
 		if runtime.GOOS == "windows" {
@@ -302,13 +265,11 @@ func CmdFind(args []string) string {
 		if h, err := os.UserHomeDir(); err == nil {
 			root = h
 		}
-		// If the user passed an explicit path as first arg (contains separator), use it
 		if len(parts) > 0 && strings.ContainsAny(parts[0], `/\`) {
 			root = expandPath(parts[0])
 		}
 	}
 
-	// Larger search with timeout (shorter for default home search, longer for full-disk)
 	timeout := 8 * time.Second
 	if all {
 		timeout = 20 * time.Second
