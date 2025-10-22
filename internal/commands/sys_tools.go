@@ -12,10 +12,7 @@
 package commands
 
 import (
-	"fmt"
 	"os/exec"
-	"runtime"
-	"strings"
 )
 
 func CmdSpeedtest(_ []string) string {
@@ -33,7 +30,7 @@ func CmdSpeedtest(_ []string) string {
 	return "Opened speedtest.net in browser."
 }
 
-func CmdSysPerf(_ []string) string {
+/*func CmdSysPerf(_ []string) string {
 	info := []string{}
 	info = append(info, "0xRootShell — system summary")
 	info = append(info, "OS: "+runtime.GOOS)
@@ -61,3 +58,4 @@ func CmdSysPerf(_ []string) string {
 	}
 	return strings.Join(info, "\n")
 }
+*/

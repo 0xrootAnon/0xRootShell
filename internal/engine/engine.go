@@ -76,6 +76,18 @@ func (e *Engine) Execute(raw string) string {
 		}
 		return commands.CmdFind(args)
 	case "sys":
+		if len(args) == 0 {
+			return "sys: expected subcommand. Try 'sys status' or 'sys perf'"
+		}
+		sub := strings.ToLower(args[0])
+		switch sub {
+		case "status":
+			return commands.CmdSysStatus()
+		case "perf":
+			return commands.CmdSysPerf()
+		default:
+			return "sys: unknown subcommand"
+		}
 		return commands.CmdSys(args)
 	case "audio", "vol":
 		return commands.CmdAudio(args)
@@ -97,6 +109,11 @@ func (e *Engine) Execute(raw string) string {
 		return commands.CmdScreenshot(args)
 	case "search", "web":
 		return commands.CmdSearch(args)
+	case "show":
+		if len(args) > 0 && strings.ToLower(args[0]) == "notifications" {
+			return commands.CmdShowNotifications()
+		}
+		return "show: unknown target. Try 'show notifications'"
 	case "remind":
 		return commands.CmdRemind(args)
 	case "goal":
@@ -129,17 +146,6 @@ func (e *Engine) Execute(raw string) string {
 		return commands.CmdPlay(args)
 	case "pause", "next", "prev":
 		return commands.CmdMediaControl(append([]string{verb}, args...))
-	case "record":
-		if e.MsgChan != nil {
-			qargs := append([]string(nil), args...)
-			go func(a []string) {
-				e.MsgChan <- "Starting recording..."
-				res := commands.CmdRecord(a)
-				e.MsgChan <- res
-			}(qargs)
-			return "Recording started..."
-		}
-		return commands.CmdRecord(args)
 	case "alarm", "timer":
 		if e.MsgChan != nil {
 			go commands.ScheduleTimer(args, e.MsgChan)
@@ -158,24 +164,26 @@ func (e *Engine) Execute(raw string) string {
 }
 
 func helpText() string {
-	return `0xRootShell — help
+	return `				0xRootShell
 Common commands:
-  cd <dir>                 Change current directory
-  pwd                      Print current directory
-  launch <app>             Launch application or URL
-  open <file|url>          Open file or URL
-  find <pattern>           Fuzzy file search (non-blocking; results appear when ready)
+  cd <dir>                 		Change current directory
+  pwd                      		Print current directory
+  launch <app>             		Launch application or URL
+  open <file|url>          		Open file or URL
+  find <pattern>           		Fuzzy file search (non-blocking; results appear when ready)
   sys <status|lock|sleep|off|bootlog|update>
-  audio vol <0-100>        Set volume, audio mute/unmute
-  display bright <0-100>   Set screen brightness
-  net wifi <on|off|list>   Manage wifi (nmcli/netsh)
+  audio vol <0-100>        		Set volume, audio mute/unmute
+  display bright <0-100>   		Set screen brightness
+  net wifi <on|off|list>   		Manage wifi (nmcli/netsh)
   file move <src> <dst>
-  compress <zip> <src>     Create zip archive
-  extract <zip> <dst>      Extract zip
-  screenshot               Save a screenshot to data/screenshots/
-  search <query>           Open browser with Google search
-  play <youtube|file> ...  Play media / open URL
-  remind <text>            Save a quick reminder (stored locally)
+  compress <zip> <src>     		Create zip archive
+  extract <zip> <dst>      		Extract zip
+  screenshot               		Save a screenshot to data/screenshots/
+  sys perf                  	Full system performance (CPU/Memory/Disk/Top processes)
+  show notifications        
+  search <query>           		Open browser with Google search
+  play <youtube|file> ...  		Play media / open URL
+  remind <text>            		Save a quick reminder (stored locally)
   history
   help
 `

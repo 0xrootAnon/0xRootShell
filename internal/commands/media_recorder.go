@@ -12,13 +12,7 @@
 package commands
 
 import (
-	"fmt"
-	"os"
-	"os/exec"
-	"path/filepath"
-	"runtime"
 	"strings"
-	"time"
 )
 
 func CmdMediaControl(args []string) string {
@@ -36,7 +30,7 @@ func CmdMediaControl(args []string) string {
 	}
 }
 
-func CmdRecord(args []string) string {
+/*func CmdRecord(args []string) string {
 	if len(args) == 0 {
 		return "record: expected 'screen' or 'cam' and optional duration (seconds) or output filename"
 	}
@@ -109,3 +103,4 @@ func CmdRecord(args []string) string {
 
 	return "record: ffmpeg not found. Install ffmpeg to enable recording (https://ffmpeg.org/download.html)."
 }
+*/

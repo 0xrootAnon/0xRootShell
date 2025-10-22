@@ -8,7 +8,6 @@
 // This program is distributed in the hope that it will be useful,
 // but WITHOUT ANY WARRANTY; without even the implied warranty of
 // MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
-
 package ui
 
 import (
@@ -36,32 +35,31 @@ var (
 )
 
 type tickMsg time.Time
-
 type bootDoneMsg struct{}
 type printDoneMsg struct{}
-
 type asyncMsg string
 
 type Model struct {
-	ascii     string
-	input     textinput.Model
+	ascii string
+	input textinput.Model
+
 	outputBuf []string
 	store     *store.Store
 	lastExec  time.Time
 	engine    *engine.Engine
-	width     int
-	height    int
+
+	width  int
+	height int
 
 	booting       bool
 	bootLines     []string
 	bootLineIndex int
 	bootCharIndex int
 
-	printing       bool
-	printLines     []string
-	printLineIndex int
-	printCharIndex int
-
+	printing            bool
+	printLines          []string
+	printLineIndex      int
+	printCharIndex      int
 	printPlaceholderIdx int
 
 	asyncCh chan string
@@ -74,6 +72,7 @@ type Model struct {
 func sanitizeForUI(s string) string {
 	s = strings.ReplaceAll(s, "\r", "")
 	s = uiAnsiRe.ReplaceAllString(s, "")
+	s = strings.ReplaceAll(s, "\x00", "")
 	return s
 }
 
@@ -93,7 +92,6 @@ func NewModel(st *store.Store, ascii string) Model {
 	}
 
 	ch := make(chan string, 16)
-
 	m := Model{
 		ascii:               ascii,
 		input:               ti,
@@ -118,7 +116,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tickMsg:
 		return m.handleTick()
 	case asyncMsg:
-		m.outputBuf = append(m.outputBuf, string(msg))
+		m.outputBuf = append(m.outputBuf, sanitizeForUI(string(msg)))
 		return m, listenCmd(m.asyncCh)
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
@@ -131,7 +129,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.booting || m.printing {
 				return m, nil
 			}
-
 			if m.passwordMode {
 				pwd := strings.TrimSpace(m.input.Value())
 				m.input.SetValue("")
@@ -142,21 +139,22 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 					setter.SetEchoMode(0)
 					setter.SetEchoCharacter('*')
 				}
-
 				m.passwordMode = false
-
 				cmdline := fmt.Sprintf("net wifi connect %d %s", m.passwordTargetIdx+1, pwd)
 				if err := m.store.SaveHistory(cmdline); err != nil {
 					m.outputBuf = append(m.outputBuf, "history save error: "+err.Error())
 				}
 				rawOut := m.engine.Execute(cmdline)
-
 				lines := strings.Split(rawOut, "\n")
-				m.printLines = lines
+				sLines := make([]string, 0, len(lines))
+				for _, l := range lines {
+					sLines = append(sLines, sanitizeForUI(l))
+				}
+				m.printLines = sLines
 				m.printLineIndex = 0
 				m.printCharIndex = 0
 				m.printing = true
-				m.outputBuf = append(m.outputBuf, fmt.Sprintf("> %s", cmdline))
+				m.outputBuf = append(m.outputBuf, sanitizeForUI(fmt.Sprintf("> %s", cmdline)))
 				m.outputBuf = append(m.outputBuf, "")
 				m.printPlaceholderIdx = len(m.outputBuf) - 1
 				return m, printTickCmd()
@@ -177,7 +175,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						m.passwordTargetSSID = parts[1]
 						m.passwordMode = true
 						m.input.SetValue("")
-
 						if setter, ok := interface{}(&m.input).(interface {
 							SetEchoMode(int)
 							SetEchoCharacter(rune)
@@ -185,19 +182,23 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 							setter.SetEchoMode(1)
 							setter.SetEchoCharacter('*')
 						}
-						m.outputBuf = append(m.outputBuf, fmt.Sprintf("> %s", val))
-						m.outputBuf = append(m.outputBuf, fmt.Sprintf("(enter password for '%s')", m.passwordTargetSSID))
+						m.outputBuf = append(m.outputBuf, sanitizeForUI(fmt.Sprintf("> %s", val)))
+						m.outputBuf = append(m.outputBuf, sanitizeForUI(fmt.Sprintf("(enter password for '%s')", m.passwordTargetSSID)))
 						return m, nil
 					}
 				}
 
 				lines := strings.Split(rawOut, "\n")
-				m.printLines = lines
+				sLines := make([]string, 0, len(lines))
+				for _, l := range lines {
+					sLines = append(sLines, sanitizeForUI(l))
+				}
+				m.printLines = sLines
 				m.printLineIndex = 0
 				m.printCharIndex = 0
 				m.printing = true
-				m.outputBuf = append(m.outputBuf, fmt.Sprintf("> %s", val))
-				m.outputBuf = append(m.outputBuf, "")
+				m.outputBuf = append(m.outputBuf, sanitizeForUI(fmt.Sprintf("> %s", val)))
+				m.outputBuf = append(m.outputBuf, "") // placeholder for first output line
 				m.printPlaceholderIdx = len(m.outputBuf) - 1
 				m.input.SetValue("")
 				return m, printTickCmd()
@@ -208,13 +209,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if !m.booting && !m.printing {
 		m.input, cmd = m.input.Update(msg)
 	}
-
 	return m, cmd
 }
 
 func (m Model) View() string {
 	sb := &strings.Builder{}
-
 	art := centerArt(m.ascii, m.width)
 	sb.WriteString(artStyle.Render(art))
 	sb.WriteString("\n")
@@ -227,8 +226,9 @@ func (m Model) View() string {
 	if len(m.outputBuf) > maxLines {
 		start = len(m.outputBuf) - maxLines
 	}
+
 	for _, line := range m.outputBuf[start:] {
-		sb.WriteString(line + "\n")
+		sb.WriteString(outputStyle.Render(sanitizeForUI(line)) + "\n")
 	}
 
 	if m.booting || m.printing {
@@ -327,9 +327,11 @@ func (m Model) handleTick() (tea.Model, tea.Cmd) {
 		runes := []rune(currLine)
 
 		placeholderIdx := m.printPlaceholderIdx + m.printLineIndex
+
 		for placeholderIdx >= len(m.outputBuf) {
 			m.outputBuf = append(m.outputBuf, "")
 		}
+
 		curRunes := []rune(m.outputBuf[placeholderIdx])
 		if m.printCharIndex < len(runes) {
 			curRunes = append(curRunes, runes[m.printCharIndex])
@@ -337,12 +339,15 @@ func (m Model) handleTick() (tea.Model, tea.Cmd) {
 			m.printCharIndex++
 			return m, printTickCmd()
 		}
+
 		m.printLineIndex++
 		m.printCharIndex = 0
+
 		if m.printLineIndex < len(m.printLines) {
 			m.outputBuf = append(m.outputBuf, "")
 			return m, tea.Tick(120*time.Millisecond, func(t time.Time) tea.Msg { return tickMsg(t) })
 		}
+
 		m.printing = false
 		m.printPlaceholderIdx = -1
 		return m, nil
