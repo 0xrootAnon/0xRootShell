@@ -12,6 +12,7 @@
 package commands
 
 import (
+	"errors"
 	"fmt"
 	"net/url"
 	"os"
@@ -131,16 +132,19 @@ func CmdOpen(args []string) string {
 		return "open: expected a file or url, e.g. `open ~/Downloads` or `open reddit.com`"
 	}
 	target := strings.Join(args, " ")
-
 	target = expandPath(target)
 
-	if !strings.Contains(target, "://") {
+	if strings.Contains(target, "://") {
+		if err := runOpen(target); err != nil {
+			return "open error: " + err.Error()
+		}
+		return fmt.Sprintf("Opened %s", target)
+	}
+
+	if filepath.IsAbs(target) || strings.ContainsAny(target, `/\`) {
 		if !filepath.IsAbs(target) {
 			if wd, err := os.Getwd(); err == nil {
-				try := filepath.Join(wd, target)
-				if safeExists(try) {
-					target = try
-				}
+				target = filepath.Join(wd, target)
 			}
 		}
 		if safeExists(target) {
@@ -149,59 +153,97 @@ func CmdOpen(args []string) string {
 			}
 			return fmt.Sprintf("Opened %s", target)
 		}
+		return "open error: target not found"
 	}
 
-	if looksLikeURL(target) {
-		target = prependHTTPSIfNeeded(target)
-		if err := runOpen(target); err != nil {
-			return "open error: " + err.Error()
+	if wd, err := os.Getwd(); err == nil {
+		try := filepath.Join(wd, target)
+		if safeExists(try) {
+			if err := runOpen(try); err != nil {
+				return "open error: " + err.Error()
+			}
+			return fmt.Sprintf("Opened %s", try)
 		}
-		return fmt.Sprintf("Opened %s", target)
 	}
 
-	if looksLikeURL(target) {
-		target = prependHTTPSIfNeeded(target)
-		if err := runOpen(target); err != nil {
-			return "open error: " + err.Error()
+	if home, err := os.UserHomeDir(); err == nil {
+		common := []string{
+			filepath.Join(home, "Desktop"),
+			filepath.Join(home, "Downloads"),
+			filepath.Join(home, "Documents"),
 		}
-		return fmt.Sprintf("Opened %s", target)
-	}
-
-	target = expandPath(target)
-
-	if !filepath.IsAbs(target) {
-		if wd, err := os.Getwd(); err == nil {
-			try := filepath.Join(wd, target)
+		for _, d := range common {
+			try := filepath.Join(d, target)
 			if safeExists(try) {
-				target = try
+				if err := runOpen(try); err != nil {
+					return "open error: " + err.Error()
+				}
+				return fmt.Sprintf("Opened %s", try)
+			}
+		}
+		if od := os.Getenv("OneDrive"); od != "" {
+			tries := []string{
+				filepath.Join(od, "Desktop", target),
+				filepath.Join(od, "Documents", target),
+				filepath.Join(od, "Downloads", target),
+			}
+			for _, try := range tries {
+				if safeExists(try) {
+					if err := runOpen(try); err != nil {
+						return "open error: " + err.Error()
+					}
+					return fmt.Sprintf("Opened %s", try)
+				}
+			}
+		}
+		if home, err := os.UserHomeDir(); err == nil {
+			start := time.Now()
+			found := ""
+			_ = filepath.WalkDir(home, func(path string, d os.DirEntry, err error) error {
+				if err != nil {
+					return nil
+				}
+				if time.Since(start) > 2*time.Second {
+					return errors.New("timeout")
+				}
+				if !d.IsDir() && strings.EqualFold(filepath.Base(path), target) {
+					found = path
+					return errors.New("found")
+				}
+				return nil
+			})
+			if found != "" {
+				if err := runOpen(found); err != nil {
+					return "open error: " + err.Error()
+				}
+				return fmt.Sprintf("Opened %s", found)
 			}
 		}
 	}
 
-	if !safeExists(target) && !strings.ContainsAny(target, `/\`) {
-		home, _ := os.UserHomeDir()
-		aliases := map[string]string{
-			"downloads": filepath.Join(home, "Downloads"),
-			"desktop":   filepath.Join(home, "Desktop"),
-			"documents": filepath.Join(home, "Documents"),
+	home, _ := os.UserHomeDir()
+	aliases := map[string]string{
+		"downloads": filepath.Join(home, "Downloads"),
+		"desktop":   filepath.Join(home, "Desktop"),
+		"documents": filepath.Join(home, "Documents"),
+	}
+	l := strings.ToLower(target)
+	if p, ok := aliases[l]; ok && safeExists(p) {
+		if err := runOpen(p); err != nil {
+			return "open error: " + err.Error()
 		}
-		l := strings.ToLower(target)
-		if p, ok := aliases[l]; ok && safeExists(p) {
-			target = p
-		}
+		return fmt.Sprintf("Opened %s", p)
 	}
 
-	if !safeExists(target) {
-		if !strings.ContainsAny(target, `/\`) {
-			return fmt.Sprintf("open: '%s' not found. Try `find %s` or provide a full/relative path.", target, target)
+	if looksLikeURL(target) {
+		target = prependHTTPSIfNeeded(target)
+		if err := runOpen(target); err != nil {
+			return "open error: " + err.Error()
 		}
-		return "open error: target not found"
+		return fmt.Sprintf("Opened %s", target)
 	}
 
-	if err := runOpen(target); err != nil {
-		return "open error: " + err.Error()
-	}
-	return fmt.Sprintf("Opened %s", target)
+	return fmt.Sprintf("open: '%s' not found. Try `find %s` or provide a full/relative path.", target, target)
 }
 
 func CmdFind(args []string) string {
