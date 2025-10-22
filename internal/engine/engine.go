@@ -83,6 +83,12 @@ func (e *Engine) Execute(raw string) string {
 		return commands.CmdDisplay(args)
 	case "net", "network":
 		return commands.CmdNet(args)
+	case "scan":
+		if e.MsgChan != nil {
+			go commands.StartScan(args, e.MsgChan)
+			return "Scan started... results will appear below."
+		}
+		return commands.CmdScan(args)
 	case "file", "files":
 		return commands.CmdFile(args)
 	case "compress", "zip", "extract":
