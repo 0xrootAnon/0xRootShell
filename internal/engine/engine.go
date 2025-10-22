@@ -93,6 +93,15 @@ func (e *Engine) Execute(raw string) string {
 		return commands.CmdSearch(args)
 	case "remind":
 		return commands.CmdRemind(args)
+	case "goal":
+		return commands.CmdGoal(args)
+	case "focus":
+		if e.MsgChan != nil {
+			qargs := append([]string(nil), args...)
+			go commands.StartFocus(qargs, e.MsgChan)
+			return "Focus started..."
+		}
+		return commands.CmdFocus(args)
 	case "help":
 		return helpText()
 	case "history":
