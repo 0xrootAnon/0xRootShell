@@ -185,26 +185,46 @@ func (e *Engine) Execute(raw string) string {
 func helpText() string {
 	return `				0xRootShell
 Common commands:
-  cd <dir>                 		Change current directory
+  sys <lock|sleep|off|bootlog|update|status|perf>
+  cd <dir>                		Change current directory
   pwd                      		Print current directory
-  launch <app>             		Launch application or URL
+  launch <app>             		Launch application or URL (aliases: openapp, start)
   open <file|url>          		Open file or URL
+  clear browser history    		Clear browser history (use: 'clear browser history')
+  browse private <query>   		Private browsing helper (use: 'browse private')
   find <pattern>           		Fuzzy file search (non-blocking; results appear when ready)
-  sys <status|lock|sleep|off|bootlog|update>
+  scan  	             		Start system scan (non-blocking; results appear when ready) 
   audio vol <0-100>        		Set volume, audio mute/unmute
-  display bright <0-100>   		Set screen brightness
-  net wifi <on|off|list>   		Manage wifi (nmcli/netsh)
-  file move <src> <dst>
-  compress <zip> <src>     		Create zip archive
+  display bright <0-100>   		Set screen brightness (aliases: display, brightness, screen)
+  net wifi <on|off|list>   		Manage wifi (nmcli / netsh)
+  file <subcmd>            		File operations (aliases: files) — e.g. file move <src> <dst>
+  compress|zip <zip> <src>		Create zip archive
   extract <zip> <dst>      		Extract zip
   screenshot               		Save a screenshot to data/screenshots/
   sys perf                  	Full system performance (CPU/Memory/Disk/Top processes)
-  show notifications        
-  search <query>           		Open browser with Google search
-  play <youtube|file> ...  		Play media / open URL
+  show notifications       		Show saved notifications
+  search|web <query>       		Open browser with Google search
+  play <youtube|file|url>  		Play media / open URL
+  pause|next|prev          		Media controls (pause / next / prev)
   remind <text>            		Save a quick reminder (stored locally)
-  history
-  help
+  history                 		Show command history
+  help                    		Show this help
+  weather <location?>     		Get weather
+  convert|currency <args> 		Currency / unit conversions
+  news <args>             		Fetch latest news
+  message|msg <args>      		Send message / manage messages
+  mail <args>             		Mail commands
+  notify <args>           		Send a notification
+  alarm|timer <args>      		Schedule alarm/timer (if message channel available)
+  speedtest <args>        		Run internet speedtest (non-blocking; streamed output if available)
+  ls                      		List directory contents
+  calc <expression>       		Calculator
+  goal <args>             		Goal tracking helper
+  focus <args>            		Start focus session (non-blocking; results/updates streamed)
+
+Notes:
+ - Non-blocking commands (find, scan, focus, speedtest, alarm/timer when MsgChan used) will print "results will appear below" and stream updates when a message channel is configured.
+ - Some aliases exist: e.g. launch == openapp == start, search == web, convert == currency, message == msg, file == files.
 `
 }
 
