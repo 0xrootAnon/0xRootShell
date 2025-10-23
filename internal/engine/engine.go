@@ -58,6 +58,16 @@ func (e *Engine) Execute(raw string) string {
 		return e.CmdPwd()
 	case "launch", "openapp", "start":
 		return commands.CmdLaunch(args)
+	case "clear":
+		if len(args) >= 2 && strings.ToLower(args[0]) == "browser" && strings.ToLower(args[1]) == "history" {
+			return commands.CmdClearBrowserHistory(args[2:])
+		}
+		return "clear: unknown target. Try 'clear browser history' or use your terminal to clear the screen."
+	case "browse":
+		if len(args) > 0 && strings.ToLower(args[0]) == "private" {
+			return commands.CmdBrowsePrivate(args[1:])
+		}
+		return "browse: unknown target. Try 'browse private'."
 	case "open":
 		return commands.CmdOpen(args)
 	case "find", "searchfile":
@@ -153,6 +163,15 @@ func (e *Engine) Execute(raw string) string {
 		}
 		return "Timer not scheduled: no message channel."
 	case "speedtest":
+		if e.MsgChan != nil {
+			qargs := append([]string(nil), args...)
+			go func(a []string) {
+				e.MsgChan <- sanitizeForUI("Starting speedtest...")
+				commands.CmdSpeedtestStream(a, e.MsgChan)
+				e.MsgChan <- sanitizeForUI("Speedtest finished.")
+			}(qargs)
+			return "Running speedtest... results will appear below."
+		}
 		return commands.CmdSpeedtest(args)
 	case "ls":
 		return commands.CmdLS(args)
