@@ -95,10 +95,24 @@ func (e *Engine) Execute(raw string) string {
 			return commands.CmdSysStatus()
 		case "perf":
 			return commands.CmdSysPerf()
+		case "lock":
+			return commands.SysLock()
+		case "sleep":
+			return commands.SysSleep()
+		case "off", "shutdown":
+			for _, a := range args {
+				if a == "--confirm" || a == "-y" {
+					return commands.SysShutdown()
+				}
+			}
+			return "sys off: destructive action. append --confirm to actually shutdown."
+		case "bootlog":
+			return commands.SysBootLog()
+		case "update":
+			return "sys update: use OS update tool (Windows Settings / apt / dnf / etc.)"
 		default:
 			return "sys: unknown subcommand"
 		}
-		return commands.CmdSys(args)
 	case "audio", "vol":
 		return commands.CmdAudio(args)
 	case "display", "brightness", "screen":
@@ -212,8 +226,6 @@ Common commands:
   weather <location?>     		Get weather
   convert|currency <args> 		Currency / unit conversions
   news <args>             		Fetch latest news
-  message|msg <args>      		Send message / manage messages
-  mail <args>             		Mail commands
   notify <args>           		Send a notification
   alarm|timer <args>      		Schedule alarm/timer (if message channel available)
   speedtest <args>        		Run internet speedtest (non-blocking; streamed output if available)
