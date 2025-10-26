@@ -233,10 +233,6 @@ Common commands:
   calc <expression>       		Calculator
   goal <args>             		Goal tracking helper
   focus <args>            		Start focus session (non-blocking; results/updates streamed)
-
-Notes:
- - Non-blocking commands (find, scan, focus, speedtest, alarm/timer when MsgChan used) will print "results will appear below" and stream updates when a message channel is configured.
- - Some aliases exist: e.g. launch == openapp == start, search == web, convert == currency, message == msg, file == files.
 `
 }
 
