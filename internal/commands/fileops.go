@@ -73,7 +73,7 @@ func fileMove(src, dst string) string {
 	return fmt.Sprintf("Moved %s -> %s", src, dst)
 }
 
-func copyFileOrDir(src, dst string) error {
+/*func copyFileOrDir(src, dst string) error {
 	info, err := os.Stat(src)
 	if err != nil {
 		return err
@@ -107,7 +107,7 @@ func copyFileOrDir(src, dst string) error {
 		return err
 	}
 	return out.Sync()
-}
+}*/
 
 func fileRenameBulk(pattern, repl string) string {
 	matches, err := filepath.Glob(pattern)

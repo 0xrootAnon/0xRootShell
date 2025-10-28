@@ -26,7 +26,7 @@ import (
 	"github.com/skratchdot/open-golang/open"
 )
 
-func expandPath(p string) string {
+/*func expandPath(p string) string {
 	if p == "" {
 		return p
 	}
@@ -42,7 +42,7 @@ func expandPath(p string) string {
 		}
 	}
 	return p
-}
+}*/
 
 func looksLikeURL(s string) bool {
 	if strings.Contains(s, "://") {

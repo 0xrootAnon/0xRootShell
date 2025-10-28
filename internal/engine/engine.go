@@ -125,6 +125,86 @@ func (e *Engine) Execute(raw string) string {
 			return "Scan started... results will appear below."
 		}
 		return commands.CmdScan(args)
+	case "create":
+		if len(args) > 0 {
+			t := strings.ToLower(args[0])
+			if t == "folder" || t == "directory" || t == "dir" {
+				return commands.CmdMkdir(args[1:])
+			}
+			return commands.CmdMkdir(args)
+		}
+		return commands.CmdMkdir(args)
+	case "touch":
+		return commands.CmdTouch(args)
+	case "new":
+		if len(args) == 0 {
+			return commands.CmdMkdir(args)
+		}
+		first := strings.ToLower(args[0])
+		if first == "file" || first == "document" {
+			return commands.CmdTouch(args[1:])
+		}
+		if first == "folder" || first == "directory" || first == "dir" {
+			return commands.CmdMkdir(args[1:])
+		}
+
+		if len(args) > 0 {
+			if ext := filepath.Ext(args[0]); ext != "" {
+				return commands.CmdTouch(args)
+			}
+		}
+
+		return commands.CmdMkdir(args)
+	case "remove", "delete":
+		if len(args) > 0 {
+			t := strings.ToLower(args[0])
+			if t == "folder" || t == "directory" || t == "dir" {
+				return commands.CmdRmdir(args[1:])
+			}
+			if t == "file" {
+				return commands.CmdDel(args[1:])
+			}
+			return commands.CmdDel(args)
+		}
+		return "remove: usage examples: 'remove folder <name>' or 'remove <file>'"
+
+	case "mkdir":
+		return commands.CmdMkdir(args)
+	case "rmdir":
+		return commands.CmdRmdir(args)
+	case "del", "deletefile":
+		return commands.CmdDel(args)
+	case "rm":
+		return commands.CmdRm(args)
+	case "copy", "cp":
+		return commands.CmdCp(args)
+	case "move", "mv":
+		return commands.CmdMv(args)
+	case "view", "read", "openfile":
+		return commands.CmdCat(args)
+	case "cat":
+		return commands.CmdCat(args)
+	case "search-in", "searchinside", "findin":
+		return commands.CmdGrep(args)
+	case "grep":
+		return commands.CmdGrep(args)
+	case "tasks", "processes":
+		return commands.CmdTasklist(args)
+	case "tasklist":
+		return commands.CmdTasklist(args)
+	case "kill", "end", "terminate", "stop":
+		return commands.CmdTaskkill(args)
+	case "taskkill":
+		return commands.CmdTaskkill(args)
+	case "drives", "volumes", "disk", "disks":
+		return commands.CmdGetVolume(args)
+	case "get-volume", "wmic":
+		return commands.CmdGetVolume(args)
+	case "save":
+		if len(args) > 0 && (strings.ToLower(args[0]) == "file" || strings.HasPrefix(args[0], ".") || filepath.Ext(args[0]) != "") {
+			return commands.CmdTouch(args[1:])
+		}
+		return "save: try 'save file <name>'"
 	case "file", "files":
 		return commands.CmdFile(args)
 	case "compress", "zip", "extract":
@@ -233,6 +313,18 @@ Common commands:
   calc <expression>       		Calculator
   goal <args>             		Goal tracking helper
   focus <args>            		Start focus session (non-blocking; results/updates streamed)
+  create folder <name>     		Create a new folder (alias: mkdir)
+  remove folder <name>     		Delete a folder (alias: rmdir)
+  delete <file>            		Delete a file (alias: del)
+  copy <src> <dst>         		Copy file or folder (alias: cp)
+  move <src> <dst>         		Move or rename file/folder (alias: mv)
+  read <file>         		Display contents of a file (alias: cat)
+  findin <pattern> <file>  	Search inside files (alias: grep)
+  tasks|processes          		Show running processes (alias: tasklist)
+  kill|end <pid|name>      		Terminate a process (alias: taskkill)
+  drives|volumes           		Show connected drives / volumes (alias: get-volume)
+  new file <name>         		Create new file
+  save <filename>				Save file
 `
 }
 
