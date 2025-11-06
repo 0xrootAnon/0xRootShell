@@ -1,6 +1,7 @@
 # 0xRootShell
 
 Minimalist, cinematic terminal for windows.
+>project at halt till my exams
 
 ## Quick run (dev on Linux)
 
